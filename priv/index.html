@@ -1,0 +1,101 @@
+<html>
+	<head>
+
+		<style type="text/css">
+			progress[value] {
+			  /* Reset the default appearance */
+			  -webkit-appearance: none;
+			   appearance: none;
+
+			  width: 250px;
+			  height: 10px;
+			}
+			progress[value]::-webkit-progress-bar {
+			  background-color: #eee;
+			  border-radius: 2px;
+			  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25) inset;
+			}
+	    </style>
+
+
+		<script type="text/javascript">
+
+		function Open(){
+			var bar =  document.getElementById("progressBar");
+			var filesize = 0;
+			var filecount = 0;
+			var barvalue = 0;
+			ws = new WebSocket("ws://1.2.4.128:80/websocket");
+			ws.onopen = function(){
+				console.log('Connected');
+			};
+			ws.onmessage = function (evt)
+			{
+				var received_msg = evt.data;
+				//console.log("Recv: " + received_msg);
+				var Count = document.getElementById('count').value;
+				if (received_msg == "1024"){
+					document.getElementById('count').value = parseInt(document.getElementById('count').value) + 1024;
+					barvalue = barvalue + filecount;
+					bar.value = barvalue;
+				} else {
+					if ("size" == received_msg.slice(0,4)) {
+						filesize = parseInt(received_msg.slice(5,received_msg.length));
+						filecount = 100/(filesize/1024);
+					}
+					if ("md5" == received_msg.slice(0,3)) {
+						filesize = 0;
+						filecount = 0;
+						barvalue = 0;
+					}
+				}
+			};
+			ws.onclose = function()
+			{
+				console.log('Connection closed log');
+			};
+		}
+
+		function Close() {
+			ws.close();
+		}; 
+
+		function SendMsg()
+		{
+			var Msg = document.getElementById('txt').value;
+			ws.send(Msg);
+			console.log('Sent: ', Msg);
+		}
+		
+		function Open_telnet(){
+			ws.send("sub");
+			console.log('Sent req to telnet 0.116');
+		}
+
+
+
+		</script>
+	</head>
+	<body>
+		<div id="menu1">
+			<a href="javascript:Open()">Open websocket connection</a>
+			<a href="javascript:Close()">Close websocket connection</a>
+			<a href="javascript:SendMsg()">SendMsg</a>
+		</div>
+		<input type="text" id="txt" size="120" value="chg" ></input>
+		
+		<div id="menu2">
+			<a href="javascript:Open_telnet()">Open telnet 0.116</a>
+		</div>
+		
+		<div id="msgs"></div>
+		<input id="count" type="text" value="0"></input>
+		<progress id="progressBar" value="0" max="100"></progress>
+
+
+
+
+
+
+	</body>
+</html>
