@@ -15,9 +15,6 @@
 %% API.
 -export([start/2, stop/1, dir_loop/0, file_loop/0, file_prep/0, read_loop/0]).
 
-dd
-
-
 %% API.
 start(_Type, _Args) ->
 	ets:new(dir_tab, [public, named_table]),
