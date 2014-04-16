@@ -13,20 +13,29 @@
 -include_lib("kernel/include/file.hrl").
 
 %% API.
--export([start/2, stop/1, dir_loop/0, file_loop/0, file_prep/0, read_loop/0]).
+-export([start/2, stop/1, dir_loop/0, file_loop/0, file_loop2/0, file_prep/0, read_loop/0]).
 
 %% API.
 start(_Type, _Args) ->
 	ets:new(dir_tab, [public, named_table]),
 	ets:new(file_tab, [public, named_table]),
 	ets:new(files, [public, named_table]),
+	ets:new(sockets, [public, named_table]),
 	ets:insert(dir_tab, {file, "file"}),
 	ets:insert(file_tab, {current_file, ""}),
 	register(dir_loop, spawn(fun() -> dir_loop() end)),
 	register(file_loop, spawn(fun() -> file_loop() end)),
+	register(file_loop2, spawn(fun() -> file_loop2() end)),
 
 
-	
+	case gen_udp:open(11111, [binary,{active, false}]) of
+		{ok, CtrlSocket} ->
+			ets:insert(sockets, {control,CtrlSocket}),
+			io:format("Success open control socket ~p~n",[CtrlSocket]);
+		{error, Reason} ->
+			io:format("Error open control socket ~p~n",[Reason]),
+			exit(socket_needed)
+	end,
 	
 	Dispatch = cowboy_router:compile([
 		{'_', [
@@ -58,39 +67,40 @@ dir_loop() ->
 			void;
 		_ ->
 			dir_loop()
-		after 10000 ->
-			ets:match_delete(dir_tab, '_'),
-			Names = cmd:run("dir.bat",5000),
-			{ok, A} = file:read_file("dir.bat"),
+		after 2000 ->
 			case ets:info(files, size) of
 				0 ->	
-					filelib:fold_files( "c:/folder1",
-								".*",
-								true,
+					NumFiles = filelib:fold_files( "c:/folder1",".*",true,
 								fun(File2, Acc) ->
-									io:format("Files ~p~n", [File2]), 
-									ets:insert(files, {File2, none}),
-									[File2|Acc]
-					end, []);
+									%%io:format("Files ~p~n", [File2]), 
+									ets:insert(files, {File2, {status,none}}),
+									Acc + 1
+					end, 0),
+					io:format("Files added ~p~n", [NumFiles]);
 				NumFiles ->
 					io:format("No re-read dir, because files in work: ~p~n", [NumFiles])
-			end,
+			end
 
-			B = erlang:binary_to_list(A),
-			Dir = string:substr(B, string:str(B,"dir") + 4, string:str(B,"/b") - string:str(B,"dir") - 5),
-			%%io:format("Files string: ~p~p~p~n", string:tokens(Names,"\r\n")),
-			lists:foldl(fun(File,AccIn) ->
-          		ets:insert(dir_tab, {AccIn, File}),
-				file_loop ! {AccIn, File, Dir},
-            	io:format("Key inserted: ~p acc is ~p~n",[File,AccIn]),
-				AccIn + 1
-     			end, 1 , string:tokens(Names,"\r\n")),
-			dir_loop()
+			%% ets:match_delete(dir_tab, '_'),
+			%% Names = cmd:run("dir.bat",5000),
+			%% {ok, A} = file:read_file("dir.bat"),
+
+			%% B = erlang:binary_to_list(A),
+			%% Dir = string:substr(B, string:str(B,"dir") + 4, string:str(B,"/b") - string:str(B,"dir") - 5),
+			%% %%io:format("Files string: ~p~p~p~n", string:tokens(Names,"\r\n")),
+			%% lists:foldl(fun(File,AccIn) ->
+			%% 	ets:insert(dir_tab, {AccIn, File}),
+			%% 	file_loop ! {AccIn, File, Dir},
+			%% 	io:format("Key inserted: ~p acc is ~p~n",[File,AccIn]),
+			%% 	AccIn + 1
+			%% 	end, 1 , string:tokens(Names,"\r\n")),
+			%% dir_loop()
 	end.
 
 %%ets:select(files, ['_',[],[true]]).
 %%	ets:match(files, {'$1',none},1).
 %% ets:match(files, '$1').
+%% ets:match(files, {'$1',{status,reading},{pid,'$2'}},1).
 %% Preparation to put file into work.
 %% Check it if it is not in process now. 
 %% If all good, put it in ets table and send {filename, FileName, Dir} to file_prep function.
@@ -99,53 +109,60 @@ file_loop() ->
 		stop ->
 			void;
 		{1, FileName, Dir} ->
-
-			%%{[[Fi]],_} = ets:match(files, {'$1',none},1),
-			%%io:format("Fi: ~p~n", [Fi]),
-			%%ets:insert(files, {Fi,ttt}),
-
 			ets:insert(file_tab, {filename_buffer, FileName}),
 			[{current_file,Current_file}] = ets:lookup(file_tab, current_file),
 			case Current_file of
 				"" ->
 					io:format("Change current_file to: ~p~n", [FileName]),
 					ets:insert(file_tab, {current_file, FileName}),
-					register(file_prep, spawn(fun() -> file_prep() end)),
 					file_prep ! {filename, FileName, Dir};
 				_ ->
 					io:format("Current_file in work: ~p~n", [Current_file])
 			end,
 			file_loop()
-	end.
+end.
 
+
+file_loop2() ->
+	receive
+		stop ->
+			void
+		after 1000 ->
+			case ets:match(files, {'$1',{status, none}},1) of
+				{[[File]],_} ->
+					io:format("Start preparation for file: ~p~n", [File]),
+					ets:insert(files, {File,{status, preparation}}),
+					Pid = spawn(fun() -> file_prep() end),
+					Pid ! {filename, File};
+				_ ->
+					void
+			end,
+			%% io:format("File table content: ~p~n",[ets:match(files, '$1')]),
+			%%ets:insert(files, {Fi,ttt}),
+			file_loop2()
+end.
 %% Trying to open file, lock file, get the file properties. 
-%% If good then send some data through data socket and spawn read_loop function for this file.
+%% If good then start sending read data through data socket and spawn read_loop function for this file.
 file_prep() ->
 	receive
 		stop ->
 			exit(omg);
-		{filename, File, Dir} ->
-			Filesize = case file:read_file_info(Dir ++ "\\" ++ File) of
+		{filename, File} ->
+			Filesize = case file:read_file_info(File) of
 				{ok, Data} ->
-					io:format("Success read file_info: ~p Size: ~p~n", [Dir ++ "\\" ++ File, Data#file_info.size]),
+					io:format("Success read file_info: ~p Size: ~p~n", [File, Data#file_info.size]),
 					Data#file_info.size;
 				{error, Error} ->
-					io:format("Error read file_info: ~p. Error: ~p~n", [Dir ++ "\\" ++ File, Error]),
+					io:format("Error read file_info: ~p. Error: ~p~n", [File, Error]),
 					file_prep()
 			end,
-			case gen_udp:open(11111, [binary,{active, false}]) of
-				{ok, CtrlSocket} ->
-					io:format("Success open 'start' control socket ~p~n",[CtrlSocket]),
-					gen_udp:send(CtrlSocket,"1.2.4.133",11111,term_to_binary({File,Filesize})),
-					gproc:send({p,l, ws},{self(),ws,"filename " ++ io_lib:format("~p",[File])}),
-					gproc:send({p,l, ws},{self(),ws,"size " ++ io_lib:format("~p",[Filesize])}),
-					gen_udp:close(CtrlSocket);
-				{error, Reason} ->
-					io:format("Error open control socket ~p~n",[Reason])
-			end,
-
-			register(read_loop, spawn(fun() -> read_loop() end)),
-			read_loop ! {start,Dir,File};
+			[{_,CtrlSocket}] = ets:lookup(sockets, control),
+			gen_udp:send(CtrlSocket,"1.2.4.133",11111,term_to_binary({File,Filesize})),
+			gproc:send({p,l, ws},{self(),ws,"filename " ++ io_lib:format("~p",[File])}),
+			gproc:send({p,l, ws},{self(),ws,"size " ++ io_lib:format("~p",[Filesize])}),
+			Pid = spawn(fun() -> read_loop() end),
+			ets:insert(files, {File,{status,reading},{pid,Pid}}),
+			Pid ! {start,File, Pid};
 		Any ->
 			io:format("file_work error... ~p~n",[Any])
 	end.
@@ -153,8 +170,8 @@ file_prep() ->
 
 read_loop() ->
 	receive
-		{start,Dir,File} ->
-			Device = case file:open(Dir ++ "\\" ++ File, [read,raw,binary]) of
+		{start,File, Pid} ->
+			Device = case file:open(File, [read,raw,binary]) of
 						{ok, D} ->
 							D;
 						{error, Err} ->
@@ -168,22 +185,15 @@ read_loop() ->
 			case file:read(Device, 1024) of
 				{ok, Data} -> 
 				%%	io:format("Send data sock~p~n",[Data]),
-					read_loop ! {{ok,Data},Device,Digest,Socket},
+					Pid ! {{ok,Data},Device,Digest,Socket,Pid},
 					read_loop();
 				eof ->
 					case file:close(Device) of
 						ok ->
 							Context = erlang:md5_final(Digest),
-							case gen_udp:open(11111, [binary,{active, false}]) of
-								{ok,CtrlSocket} ->
-									io:format("Success open 'end' control socket ~p~n",[CtrlSocket]),
-									gen_udp:send(CtrlSocket,"1.2.4.133",11111,Context),
-									gproc:send({p,l, ws},{self(),ws,"Empty file"}),
-									gen_udp:close(CtrlSocket);
-							{error, Reason} ->
-									io:format("Error open control socket ~p~n",[Reason]),
-									exit(soket_bad)
-							end,							
+							[{_,CtrlSocket}] = ets:lookup(sockets, control),
+							gen_udp:send(CtrlSocket,"1.2.4.133",11111,Context),
+							gproc:send({p,l, ws},{self(),ws,"Empty file"}),
 							ets:insert(file_tab, {current_file, ""}),
 							io:format("Success close empty file: ~n");
 						{error, Reason} ->
@@ -206,29 +216,24 @@ read_loop() ->
 					ets:insert(file_tab, {current_file, ""}),
 					exit(oops)
 			end;			
-		{{ok, Bin},Device,Digest,Socket} ->
+		{{ok, Bin},Device,Digest,Socket, Pid} ->
 			NewDigest = erlang:md5_update(Digest, Bin),
 			gproc:send({p,l, ws},{self(),ws,"1024"}),
 			gen_udp:send(Socket,"1.2.4.133",11112,Bin),
 			case file:read(Device, 1024) of
 				{ok, Data} -> 
-					read_loop ! {{ok,Data},Device,NewDigest,Socket},
+					Pid ! {{ok,Data},Device,NewDigest,Socket, Pid},
 					read_loop();
 				eof ->
 					case file:close(Device) of
 						ok ->
 							Context = erlang:md5_final(NewDigest),
-							case gen_udp:open(11111, [binary,{active, false}]) of
-								{ok,CtrlSocket} ->
-									io:format("Success open 'end' control socket ~p~n",[CtrlSocket]),
-									gen_udp:send(CtrlSocket,"1.2.4.133",11111,Context),
-									gproc:send({p,l, ws},{self(),ws,"md5 " ++ io_lib:format("~p",[Context])}),
-									gen_udp:close(CtrlSocket);
-								{error, Reason} ->
-									io:format("Error open control socket ~p~n",[Reason]),
-									exit(socket_bad)
-							end,
+							[{_,CtrlSocket}] = ets:lookup(sockets, control),
+							gen_udp:send(CtrlSocket,"1.2.4.133",11111,Context),
+							gproc:send({p,l, ws},{self(),ws,"md5 " ++ io_lib:format("~p",[Context])}),
 							ets:insert(file_tab, {current_file, ""}),
+							%%{[[File]],_}  FileToClose = ets:match(files, {'$1',{status,reading},{pid,self()}},1),
+							io:format("Founded files to close: ~p~n", [FileToClose]),
 							io:format("Success close file, md5 is: ~s~n",[hexstring(Context)]);
 						{error, Reason} ->
 							io:format("Error close file: ~p~n", [Reason]),
