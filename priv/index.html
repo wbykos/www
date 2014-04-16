@@ -34,14 +34,14 @@
 				var received_msg = evt.data;
 				//console.log("Recv: " + received_msg);
 				var Count = document.getElementById('count').value;
-				if (received_msg == "1024"){
-					document.getElementById('count').value = parseInt(document.getElementById('count').value) + 1024;
+				if (received_msg == "1408"){
+					document.getElementById('count').value = parseInt(document.getElementById('count').value) + 1408;
 					barvalue = barvalue + filecount;
 					bar.value = barvalue;
 				} else {
 					if ("size" == received_msg.slice(0,4)) {
 						filesize = parseInt(received_msg.slice(5,received_msg.length));
-						filecount = 100/(filesize/1024);
+						filecount = 100/(filesize/1408);
 					}
 					if ("md5" == received_msg.slice(0,3)) {
 						filesize = 0;
