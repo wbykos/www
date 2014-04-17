@@ -19,7 +19,7 @@
 
 
 		<script type="text/javascript">
-
+		var sockets = new Array();
 		function Open(){
 			var bar =  document.getElementById("progressBar");
 			var filesize = 0;
@@ -34,20 +34,37 @@
 				var received_msg = evt.data;
 				//console.log("Recv: " + received_msg);
 				var Count = document.getElementById('count').value;
-				if (received_msg == "1408"){
-					document.getElementById('count').value = parseInt(document.getElementById('count').value) + 1408;
-					barvalue = barvalue + filecount;
-					bar.value = barvalue;
-				} else {
-					if ("size" == received_msg.slice(0,4)) {
-						filesize = parseInt(received_msg.slice(5,received_msg.length));
-						filecount = 100/(filesize/1408);
-					}
-					if ("md5" == received_msg.slice(0,3)) {
-						filesize = 0;
-						filecount = 0;
-						barvalue = 0;
-					}
+				str = evt.data[0];
+				switch (str)
+				{
+				case "1": 
+							console.log("Recv data: " + received_msg);
+							document.getElementById('count').value = parseInt(document.getElementById('count').value) + 1408;
+							barvalue = barvalue + filecount;
+							bar.value = barvalue;
+				            break;
+				case "f": 
+							console.log("Recv " + received_msg);
+				            break;
+				case "s": 
+							console.log("Recv " + received_msg);
+				            break;
+				case "p": 
+							console.log("Recv " + received_msg);
+							OpenNew(received_msg.slice(5,10));
+							// filesize = parseInt(received_msg.slice(5,received_msg.length));
+							// filecount = 100/(filesize/1408);
+							// console.log("Recv size: " + received_msg);
+				            break;
+				case "c": 
+							console.log("Recv " + evt.data);
+							
+							sockets[evt.data.slice(11,16)].close();
+							filesize = 0;
+							filecount = 0;
+							barvalue = 0;
+				            break;
+				default: console.log("Recv debug: " + received_msg);
 				}
 			};
 			ws.onclose = function()
@@ -56,9 +73,42 @@
 			};
 		}
 
+		function OpenNew(Port){
+			
+			sockets[Port] = new WebSocket("ws://1.2.4.128:80/websocket");
+			sockets[Port].onopen = function(){
+				console.log('Connected   to   port ' + Port);
+				sockets[Port].send("11112");
+			};
+			sockets[Port].onmessage = function (evt)
+			{
+				strr = evt.data[0];
+				switch (strr)
+				{
+				// case "1": 
+				// 			console.log("Recv NEW data: " + evt.data);
+				// 			// document.getElementById('count').value = parseInt(document.getElementById('count').value) + 1408;
+				// 			// barvalue = barvalue + filecount;
+				// 			// bar.value = barvalue;
+				//    			// break;
+				// 			// filesize = parseInt(received_msg.slice(5,received_msg.length));
+				// 			// filecount = 100/(filesize/1408);
+				// 			// console.log("Recv size: " + received_msg);
+				//             break;
+				// case "c": 
+				// 			console.log("Recv NEW " + evt.data);
+				// 			filesize = 0;
+				// 			filecount = 0;
+				// 			barvalue = 0;
+				//             break;
+				default: console.log("Recv debug port " + Port + " " + evt.data);
+				}
+			};
+		}
+
 		function Close() {
 			ws.close();
-		}; 
+		}
 
 		function SendMsg()
 		{
@@ -82,7 +132,7 @@
 			<a href="javascript:Close()">Close websocket connection</a>
 			<a href="javascript:SendMsg()">SendMsg</a>
 		</div>
-		<input type="text" id="txt" size="120" value="chg" ></input>
+		<input type="text" id="txt" size="120" value="11112" ></input>
 		
 		<div id="menu2">
 			<a href="javascript:Open_telnet()">Open telnet 0.116</a>
