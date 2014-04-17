@@ -1,7 +1,5 @@
 %% Feel free to use, reuse and abuse the code in this file.
 %%
-%% 11111 control socket
-%% 11112 data socket
 %%
 %% @PRIVATE
 %%  ets:match(files, '_').
@@ -78,8 +76,8 @@ dir_loop() ->
 					io:format("Files added ~p~n", [NumFiles]);
 				NumFiles ->
 					io:format("No re-read dir, because files in work: ~p~n", [NumFiles])
-			end,
-			dir_loop()
+			end
+			%% dir_loop()
 end.
 
 %%ets:select(files, ['_',[],[true]]).

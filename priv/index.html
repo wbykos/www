@@ -20,6 +20,7 @@
 
 		<script type="text/javascript">
 		var sockets = new Array();
+		var files = new Array();
 		function Open(){
 			var bar =  document.getElementById("progressBar");
 			var filesize = 0;
@@ -29,6 +30,7 @@
 			ws.onopen = function(){
 				console.log('Connected');
 			};
+			ni = document.getElementById('files_div');
 			ws.onmessage = function (evt)
 			{
 				var received_msg = evt.data;
@@ -44,10 +46,31 @@
 							bar.value = barvalue;
 				            break;
 				case "f": 
+							files.push({bar:"",size:"",name:""});
 							console.log("Recv " + received_msg);
+							// console.log("files!!!! " + files[0].name3);
+							files[files.length-1].bar = document.createElement('progress');
+							files[files.length-1].bar.setAttribute('id','pb');
+							files[files.length-1].bar.setAttribute('value',0);
+							files[files.length-1].name = document.createElement('span');
+							files[files.length-1].name.innerHTML = evt.data.slice(6,received_msg.length-1);
+							files[files.length-1].size = document.createElement('textarea');
+							// files[files.length-1].size.setAttribute = ('style', 'width:10px;height:10px;font-family:cursive;border:dotted 10px #6DB72C;');
+							files[files.length-1].size.style.width = "10px";
+							files[files.length-1].size.style.resize = "none";
+							files[files.length-1].size.style.overflow = "hidden";
+							files[files.length-1].size.innerHTML = "0/0";
+							ni.appendChild(files[files.length-1].bar);
+							ni.appendChild(files[files.length-1].size);
+							ni.appendChild(files[files.length-1].name);
+							ni.appendChild(document.createElement('br'));
+
+
 				            break;
 				case "s": 
 							console.log("Recv " + received_msg);
+							files[files.length-1].bar.setAttribute('max',evt.data.slice(5,received_msg.length));
+							files[files.length-1].size.innerHTML = "0/" + evt.data.slice(5,received_msg.length);
 				            break;
 				case "p": 
 							console.log("Recv " + received_msg);
@@ -140,7 +163,10 @@
 		
 		<div id="msgs"></div>
 		<input id="count" type="text" value="0"></input>
-		<progress id="progressBar" value="0" max="100"></progress>
+		<progress id="progressBar" value="0" max="100"></progress><br>
+		<div id="files_div"><br></div>
+		<textarea style="resize:none;width:130px;font-family:Consolas;font-weight:300;height:20px;overflow:hidden;">1234567/1234567</textarea>
+
 
 
 
