@@ -11,25 +11,23 @@
 -module(websocket_app).
 -behaviour(application).
 -include_lib("kernel/include/file.hrl").
+-define(ControlPort, 11111).
+-define(DstIp, "1.2.4.2").
+-define(AvailablePorts, [11112,11113,11114,11115,11116]).
+-define(PacketSize, 1408).
 
 %% API.
 -export([start/2, stop/1, dir_loop/0, file_loop/0, file_prep/0, read_loop/0]).
 
--record(program, {control_port = 11111,dst_ip="1.2.4.2"}).
-%%-record(usable_ports, {lis = [11112,11113,11114,11115,11116]}).
-
 %% API.
 start(_Type, _Args) ->
-	io:format("Succes~n"),
 	ets:new(files, [public, named_table]),
 	ets:new(program, [public, named_table]),
 	register(dir_loop, spawn(fun() -> dir_loop() end)),
 	register(file_loop, spawn(fun() -> file_loop() end)),
-
-
-	case gen_udp:open(11111, [binary,{active, false}]) of
+	case gen_udp:open(?ControlPort, [binary,{active, false}]) of
 		{ok, CtrlSocket} ->
-			ets:insert(program, {data,{coontrol_socket,CtrlSocket},{control_port,#program.control_port},{dst_ip,#program.dst_ip}}),
+			ets:insert(program, {data,{coontrol_socket,CtrlSocket}}),
 			io:format("Success open control socket ~p~n",[CtrlSocket]);
 		{error, Reason} ->
 			io:format("Error open control socket ~p~n",[Reason]),
@@ -138,11 +136,10 @@ file_prep() ->
 										_ ->
 											true
 									end
-			 						end, [11112,11113,11114,11115,11116])),
- 			[{data,{control_socket,CtrlSocket},{control_port,ControlPort},{dst_ip,DstIp}}] = ets:lookup(program, data),
- 			io:format("DDDD:~p~n",[ControlPort]),
-			gen_udp:send(CtrlSocket,DstIp,ControlPort,term_to_binary({File,Filesize})),
-			io:format("DDDD2~n"),
+			 						end, ?AvailablePorts)),
+
+ 			[{_,{_,CtrlSocket}}] = ets:lookup(program, data),
+			gen_udp:send(CtrlSocket,?DstIp,?ControlPort,term_to_binary({File,Filesize})),
 			gproc:send({p,l, ws},{self(),ws,"filename " ++ io_lib:format("~p",[File])}),
 			gproc:send({p,l, ws},{self(),ws,"size " ++ io_lib:format("~p",[Filesize])}),
 			Pid ! {start,File};
@@ -153,19 +150,19 @@ file_prep() ->
 
 read_loop() ->
 	receive
-		{ok,Device,Digest,Socket,Port,DstIp} ->
-			case file:read(Device, 1408) of
+		{ok,Device,Digest,Socket,Port} ->
+			case file:read(Device, ?PacketSize) of
 				{ok, Data} -> 
 					NewDigest = erlang:adler32(Digest, Data),
-					gproc:send({p,l, ws},{self(),ws,"1408"}),
-					gen_udp:send(Socket,DstIp,Port,Data),
-					self() ! {ok,Device,NewDigest,Socket,Port,DstIp},
+					gproc:send({p,l, ws},{self(),ws, integer_to_list(?PacketSize)}),
+					gen_udp:send(Socket,?DstIp,Port,Data),
+					self() ! {ok,Device,NewDigest,Socket,Port},
 					read_loop();
 				eof ->
 					case file:close(Device) of
 						ok ->
-							[{data,{control_socket,CtrlSocket},{control_port,ControlPort},{dst_ip,DstIp}}] = ets:lookup(program, data),
-							gen_udp:send(CtrlSocket,DstIp,ControlPort,list_to_binary(integer_to_list(Digest))),
+							[{_,{_,CtrlSocket}}] = ets:lookup(program, data),
+							gen_udp:send(CtrlSocket,?DstIp,?ControlPort,list_to_binary(integer_to_list(Digest))),
 							gproc:send({p,l, ws},{self(),ws,"checksum " ++ io_lib:format("~p",[Digest])}),
 							case ets:match(files, {'$1',{status,reading},{pid,self()},{port,'_'}},1) of
 								{[[FileToClose]],_} ->
@@ -204,20 +201,20 @@ read_loop() ->
 							ets:delete(files,File),
 							exit(cant_open_file)
 						end,
-			[{data,{control_socket,CtrlSocket},{control_port,ControlPort},{dst_ip,DstIp}}] = ets:lookup(program, data),
+			[{_,{_,CtrlSocket}}] = ets:lookup(program, data),
 			[{_, {status,reading},{pid,_},{port,Port}}] = ets:lookup(files,File),
 			{ok, Socket} = gen_udp:open(Port, [binary,{active, false}]),
-			case file:read(Device, 1408) of
+			case file:read(Device, ?PacketSize) of
 				{ok, Data} -> 
-					io:format("Send data sock~p~n",[Data]),
+					%% io:format("Send data sock~p~n",[Data]),
 					Digest = erlang:adler32(Data),
-					self() ! {ok,Device,Digest,Socket,Port,DstIp},
+					self() ! {ok,Device,Digest,Socket,Port},
 					read_loop();
 				eof ->
 					case file:close(Device) of
 						ok ->
 		
-							gen_udp:send(CtrlSocket,DstIp,ControlPort,"empty"),
+							gen_udp:send(CtrlSocket,?DstIp,?ControlPort,"empty"),
 							gproc:send({p,l, ws},{self(),ws,"Empty file"}),
 							case ets:match(files, {'$1',{status,reading},{pid,self()},{port,'_'}},1) of
 								{[[FileToClose]],_} ->
