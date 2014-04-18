@@ -114,14 +114,7 @@ file_prep() ->
 		stop ->
 			exit(omg);
 		{filename, File} ->
-			Filesize = case file:read_file_info(File) of
-				{ok, Data} ->
-					io:format("Success read file_info: ~p Size: ~p~n", [File, Data#file_info.size]),
-					Data#file_info.size;
-				{error, Error} ->
-					io:format("Error read file_info: ~p. Error: ~p~n", [File, Error]),
-					file_prep()
-			end,
+
 			Pid = spawn(fun() -> read_loop() end),
 			lists:foreach(fun(E) -> E end, 
 			lists:takewhile(fun(E) -> case gen_udp:open(E, [binary,{active, false}]) of 
@@ -138,10 +131,8 @@ file_prep() ->
 									end
 			 						end, ?AvailablePorts)),
 
- 			[{_,{_,CtrlSocket}}] = ets:lookup(program, data),
-			gen_udp:send(CtrlSocket,?DstIp,?ControlPort,term_to_binary({File,Filesize})),
-			gproc:send({p,l, ws},{self(),ws,"file " ++ io_lib:format("~p",[File])}),
-			gproc:send({p,l, ws},{self(),ws,"size " ++ io_lib:format("~p",[Filesize])}),
+ 			%% [{_,{_,CtrlSocket}}] = ets:lookup(program, data),
+
 			Pid ! {start,File};
 		Any ->
 			io:format("file_work error... ~p~n",[Any])
@@ -154,7 +145,7 @@ read_loop() ->
 			case file:read(Device, ?PacketSize) of
 				{ok, Data} -> 
 					NewDigest = erlang:adler32(Digest, Data),
-					io:format("Send data...~n"),
+					%% io:format("Send data...~n"),
 					gproc:send({p,l, Port},{self(),Port, integer_to_list(?PacketSize)}),
 					gen_udp:send(Socket,?DstIp,Port,Data),
 					self() ! {ok,Device,NewDigest,Socket,Port},
@@ -206,9 +197,20 @@ read_loop() ->
 							ets:delete(files,File),
 							exit(cant_open_file)
 						end,
+			Filesize = case file:read_file_info(File) of
+				{ok, FileData} ->
+					io:format("Success read file_info: ~p Size: ~p~n", [File, FileData#file_info.size]),
+					FileData#file_info.size;
+				{error, Error} ->
+					io:format("Error read file_info: ~p. Error: ~p~n", [File, Error]),
+					file_prep()
+			end,
 			[{_,{_,CtrlSocket}}] = ets:lookup(program, data),
 			[{_, {status,reading},{pid,_},{port,Port}}] = ets:lookup(files,File),
 			{ok, Socket} = gen_udp:open(Port, [binary,{active, false}]),
+			gen_udp:send(CtrlSocket,?DstIp,?ControlPort,term_to_binary({File,Filesize})),
+			gproc:send({p,l, ws},{self(),ws,"file " ++ io_lib:format("~p",[File])}),
+			gproc:send({p,l, ws},{self(),ws,"size " ++ io_lib:format("~p",[Filesize])}),
 			gproc:send({p,l, ws},{self(),ws,"port " ++ io_lib:format("~p",[Port])}),
 			case file:read(Device, ?PacketSize) of
 				{ok, Data} -> 

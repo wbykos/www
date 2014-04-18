@@ -46,7 +46,7 @@ websocket_handle(_Data, Req, State) ->
 	{ok, Req, State}.
 
 websocket_info(Info, Req, State) ->
-	io:format("Info 1: ~n", []),
+	%% io:format("Info 1: ~n", []),
 	case Info of
 		{_PID, _Ws, _Msg} ->
 			{reply,{text, _Msg}, Req, State, hibernate};

@@ -7,14 +7,21 @@
 			  -webkit-appearance: none;
 			   appearance: none;
 
-			  width: 250px;
-			  height: 10px;
+			  width: 290px;
+			  height: 8px;
 			}
 			progress[value]::-webkit-progress-bar {
 			  background-color: #eee;
 			  border-radius: 2px;
 			  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25) inset;
 			}
+			#tr_basic { height: 21px } 
+			#td1 { width:40px }
+			#td2 { width:300 }
+			#td3 { white-space: nowrap;width:73}
+			#td4 { white-space: nowrap;width:90}
+			#td5 { white-space: nowrap}
+
 	    </style>
 
 
@@ -30,62 +37,89 @@
 			ws.onopen = function(){
 				console.log('Connected');
 			};
-			ni = document.getElementById('files_div');
+			ni = document.getElementById('files_table');
 			ws.onmessage = function (evt)
 			{
 				var received_msg = evt.data;
 				//console.log("Recv: " + received_msg);
-				var Count = document.getElementById('count').value;
+				// var Count = document.getElementById('count').value;
 				str = evt.data[0];
 				switch (str)
 				{
 				case "1": 
 							console.log("Recv data: " + received_msg);
-							document.getElementById('count').value = parseInt(document.getElementById('count').value) + 1408;
-							barvalue = barvalue + filecount;
-							bar.value = barvalue;
+							// document.getElementById('count').value = parseInt(document.getElementById('count').value) + 1408;
+							// barvalue = barvalue + filecount;
+							// bar.value = barvalue;
 				            break;
 				case "f": 
-							files.push({bar:"",size:"",name:""});
+							files.push({bar:"",tr:"",td1:"",td2:"",td3:"",td4:"",td5:""});
 							console.log("Recv " + received_msg);
 							// console.log("files!!!! " + files[0].name3);
 							files[files.length-1].bar = document.createElement('progress');
-							files[files.length-1].bar.setAttribute('id','pb');
+							files[files.length-1].bar.setAttribute('id','bar' + files.length);
 							files[files.length-1].bar.setAttribute('value',0);
-							files[files.length-1].name = document.createElement('span');
-							files[files.length-1].name.innerHTML = evt.data.slice(6,received_msg.length-1);
-							files[files.length-1].size = document.createElement('textarea');
-							// files[files.length-1].size.setAttribute = ('style', 'width:10px;height:10px;font-family:cursive;border:dotted 10px #6DB72C;');
-							files[files.length-1].size.style.width = "10px";
-							files[files.length-1].size.style.resize = "none";
-							files[files.length-1].size.style.overflow = "hidden";
-							files[files.length-1].size.innerHTML = "0/0";
-							ni.appendChild(files[files.length-1].bar);
-							ni.appendChild(files[files.length-1].size);
-							ni.appendChild(files[files.length-1].name);
-							ni.appendChild(document.createElement('br'));
+							files[files.length-1].tr = document.createElement('tr');
+							files[files.length-1].td1 = document.createElement('td');
+							files[files.length-1].td1.innerHTML = files.length;
+							files[files.length-1].td2 = document.createElement('td');
+							files[files.length-1].td3 = document.createElement('td');
+							files[files.length-1].td3.innerHTML = "0";
+							files[files.length-1].td4 = document.createElement('td');
+							files[files.length-1].td4.innerHTML = "0";
+							files[files.length-1].td5 = document.createElement('td');
+							files[files.length-1].td5.innerHTML = evt.data.slice(6,received_msg.length-1);
+							ni.appendChild(files[files.length-1].tr);
+							files[files.length-1].td2.appendChild(files[files.length-1].bar);
+							files[files.length-1].tr.appendChild(files[files.length-1].td1);
+							files[files.length-1].tr.appendChild(files[files.length-1].td2);
+							files[files.length-1].tr.appendChild(files[files.length-1].td3);
+							files[files.length-1].tr.appendChild(files[files.length-1].td4);
+							files[files.length-1].tr.appendChild(files[files.length-1].td5);
+							// files[files.length-1].name = document.createElement('span');
+							// files[files.length-1].name.innerHTML = evt.data.slice(6,received_msg.length-1);
+							// files[files.length-1].size = document.createElement('textarea');
+							// // files[files.length-1].size.setAttribute = ('style', 'width:10px;height:10px;font-family:cursive;border:dotted 10px #6DB72C;');
+							// files[files.length-1].size.style.width = "10px";
+							// files[files.length-1].size.style.resize = "none";
+							// files[files.length-1].size.style.overflow = "hidden";
+							// files[files.length-1].size.innerHTML = "0/0";
+							// ni.appendChild(files[files.length-1].bar);
+							// ni.appendChild(files[files.length-1].size);
+							// ni.appendChild(files[files.length-1].name);
+							// ni.appendChild(document.createElement('br'));
 
 
 				            break;
 				case "s": 
 							console.log("Recv " + received_msg);
 							files[files.length-1].bar.setAttribute('max',evt.data.slice(5,received_msg.length));
-							files[files.length-1].size.innerHTML = "0/" + evt.data.slice(5,received_msg.length);
+							if (received_msg.length < 11) {
+								NewSize = Math.floor(parseInt(evt.data.slice(5,received_msg.length)) / 1024);
+								NewSize = NewSize + " kb";
+								} else {
+								NewSize = Math.floor(parseInt(evt.data.slice(5,received_msg.length)) / 1048576);
+								NewSize = NewSize + " mb";
+								}
+
+
+							files[files.length-1].td4.innerHTML = "/ " + NewSize;
 				            break;
 				case "p": 
 							console.log("Recv " + received_msg);
-							OpenNew(received_msg.slice(5,10));
+							OpenNew(received_msg.slice(5,10),files.length-1);
 							// filesize = parseInt(received_msg.slice(5,received_msg.length));
 							// filecount = 100/(filesize/1408);
 							// console.log("Recv size: " + received_msg);
 				            break;
 				case "c": 
 							console.log("Recv " + evt.data);
-							
-							sockets[evt.data.slice(11,16)].close();
-							filesize = 0;
-							filecount = 0;
-							barvalue = 0;
+							sockets[evt.data.slice(11,16)].ws.close();
+							sockets[evt.data.slice(11,16)].bar.setAttribute('max',0);
+							files[sockets[evt.data.slice(11,16)].id].td3.innerHTML = files[sockets[evt.data.slice(11,16)].id].td4.innerHTML.slice(2,files[sockets[evt.data.slice(11,16)].id].td4.innerHTML.length);
+							// filesize = 0;
+							// filecount = 0;
+							// barvalue = 0;
 				            break;
 				default: console.log("Recv debug: " + received_msg);
 				}
@@ -96,28 +130,43 @@
 			};
 		}
 
-		function OpenNew(Port){
-			
-			sockets[Port] = new WebSocket("ws://1.2.4.128:80/websocket");
-			sockets[Port].onopen = function(){
+		function OpenNew(Port,Id){
+			sockets[Port] = {ws:"",bar:"",recv:"",id:""};
+			sockets[Port].ws = new WebSocket("ws://1.2.4.128:80/websocket");
+			sockets[Port].bar = document.getElementById('bar'+(Id+1));
+			sockets[Port].recv = 0;	
+			sockets[Port].id = Id;	
+			console.log("THIS !!! " + sockets[Port].bar);	
+			console.log("THIS !!! " + sockets[Port].recv);	
+			sockets[Port].ws.onopen = function(){
 				console.log('Connected   to   port ' + Port);
-				sockets[Port].send("11112");
+				sockets[Port].ws.send(Port);
 			};
-			sockets[Port].onmessage = function (evt)
+			sockets[Port].ws.onmessage = function (evt)
 			{
 				strr = evt.data[0];
 				switch (strr)
 				{
-				// case "1": 
-				// 			console.log("Recv NEW data: " + evt.data);
-				// 			// document.getElementById('count').value = parseInt(document.getElementById('count').value) + 1408;
-				// 			// barvalue = barvalue + filecount;
-				// 			// bar.value = barvalue;
-				//    			// break;
-				// 			// filesize = parseInt(received_msg.slice(5,received_msg.length));
-				// 			// filecount = 100/(filesize/1408);
-				// 			// console.log("Recv size: " + received_msg);
-				//             break;
+				case "1": 
+							// console.log("Recv data port " + Port + " " + evt.data);
+							sockets[Port].bar.value = sockets[Port].bar.value + 1408;
+							sockets[Port].recv = sockets[Port].recv + 1408;
+							Sum = sockets[Port].recv;
+							if ( Sum.toString().length < 7) {
+								Sum = Math.floor(Sum / 1024) + " kb";
+								files[Id].td3.innerHTML = Sum;	
+								}else{
+								Sum = Math.floor(Sum / 1048576) + " mb";
+								files[Id].td3.innerHTML = Sum;
+								}
+							
+							// barvalue = barvalue + filecount;
+							// bar.value = barvalue;
+				   			// break;
+							// filesize = parseInt(received_msg.slice(5,received_msg.length));
+							// filecount = 100/(filesize/1408);
+							// console.log("Recv size: " + received_msg);
+				            break;
 				// case "c": 
 				// 			console.log("Recv NEW " + evt.data);
 				// 			filesize = 0;
@@ -160,18 +209,24 @@
 		<div id="menu2">
 			<a href="javascript:Open_telnet()">Open telnet 0.116</a>
 		</div>
-		
+	<!--	
 		<div id="msgs"></div>
 		<input id="count" type="text" value="0"></input>
 		<progress id="progressBar" value="0" max="100"></progress><br>
 		<div id="files_div"><br></div>
-		<textarea style="resize:none;width:130px;font-family:Consolas;font-weight:300;height:20px;overflow:hidden;">1234567/1234567</textarea>
+		<textarea style="resize:none;width:130px;font-family:Consolas;vertical-align:top;height:40px;overflow:hidden;">1234567/1234567</textarea><br><br>
+	-->
+<table id="files_table" style="border-style:ridge;border-collapse:collapse;font-family:Consolas;font-size:12px;" cellspacing="0" border="0" cellpadding="1" height="1" width="1024">
 
+<tr id="tr_basic">
+<td id="td1">0</td>
+<td id="td2"><progress id="progressBar" value="0" max="100"></progress></td>
+<td id="td3">1234567890</td>
+<td id="td4">/ 1234567890</td>
+<td id="td5">c:/folder1/FreeBSD-9.1-RELEASE-i386-memstick.img</td>
+</tr>
 
-
-
-
-
+</table>
 
 	</body>
 </html>
