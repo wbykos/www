@@ -92,18 +92,40 @@
 
 				            break;
 				case "s": 
+							Id = files.length-1;
+							Size = evt.data.slice(5,received_msg.length);
 							console.log("Recv " + received_msg);
-							files[files.length-1].bar.setAttribute('max',evt.data.slice(5,received_msg.length));
-							if (received_msg.length < 11) {
-								NewSize = Math.floor(parseInt(evt.data.slice(5,received_msg.length)) / 1024);
-								NewSize = NewSize + " kb";
-								} else {
-								NewSize = Math.floor(parseInt(evt.data.slice(5,received_msg.length)) / 1048576);
-								NewSize = NewSize + " mb";
-								}
-
-
-							files[files.length-1].td4.innerHTML = "/ " + NewSize;
+							files[Id].bar.setAttribute('max',evt.data.slice(5,received_msg.length));
+							//if (received_msg.length < 11) {
+							//	NewSize = Math.floor(parseInt(evt.data.slice(5,received_msg.length)) / 1024);
+							//	NewSize = NewSize + " kb";
+							//	} else {
+							//	NewSize = Math.floor(parseInt(evt.data.slice(5,received_msg.length)) / 1048576);
+							//	NewSize = NewSize + " mb";
+							//	}
+							switch(Size.toString().length)
+							{
+							case 1:	
+							case 2:
+							case 3:
+								files[Id].td4.innerHTML = "/ " + Size + " bytes";
+								break;
+							case 4:						
+							case 5:
+							case 6:
+								files[Id].td4.innerHTML = "/ " + Math.floor(Size/1024) + " kb";
+								break;
+							case 7:
+							case 8:
+							case 9:
+								files[Id].td4.innerHTML = "/ " + Math.floor(Size/1048576) + " mb";
+								break;
+							case 10:
+							case 11:
+								files[Id].td4.innerHTML = "/ " + Math.floor(Size/1073741824) + " gb";
+								break;
+							}
+							
 				            break;
 				case "p": 
 							console.log("Recv " + received_msg);
@@ -115,11 +137,31 @@
 				case "c": 
 							console.log("Recv " + evt.data);
 							sockets[evt.data.slice(11,16)].ws.close();
-							sockets[evt.data.slice(11,16)].bar.setAttribute('max',0);
-							files[sockets[evt.data.slice(11,16)].id].td3.innerHTML = files[sockets[evt.data.slice(11,16)].id].td4.innerHTML.slice(2,files[sockets[evt.data.slice(11,16)].id].td4.innerHTML.length);
-							// filesize = 0;
-							// filecount = 0;
-							// barvalue = 0;
+							Id = sockets[evt.data.slice(11,16)].id;
+							sockets[evt.data.slice(11,16)].bar.value = files[Id].bar.getAttribute('max');
+							Size = files[Id].bar.getAttribute('max');
+							switch(Size.toString().length)
+							{
+							case 1:	
+							case 2:
+							case 3:
+								files[Id].td3.innerHTML = Size + " bytes";
+								break;
+							case 4:						
+							case 5:
+							case 6:
+								files[Id].td3.innerHTML = Math.floor(Size/1024) + " kb";
+								break;
+							case 7:
+							case 8:
+							case 9:
+								files[Id].td3.innerHTML = Math.floor(Size/1048576) + " mb";
+								break;
+							case 10:
+							case 11:
+								files[Id].td3.innerHTML = Math.floor(Size/1073741824) + " gb";
+								break;
+							}
 				            break;
 				default: console.log("Recv debug: " + received_msg);
 				}

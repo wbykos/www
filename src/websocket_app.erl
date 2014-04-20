@@ -77,7 +77,7 @@ dir_loop() ->
 				NumFiles ->
 					io:format("No re-read dir, because files in work: ~p~n", [NumFiles])
 			end
-			%% dir_loop()
+			%%dir_loop()
 end.
 
 %%ets:select(files, ['_',[],[true]]).
@@ -93,7 +93,7 @@ file_loop() ->
 	receive
 		stop ->
 			void
-		after 5000 ->
+		after 100 ->
 			case ets:match(files, {'$1',{status, none}},1) of
 				{[[File]],_} ->
 					io:format("Start preparation for file: ~p~n", [File]),
