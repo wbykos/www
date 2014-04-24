@@ -2,10 +2,7 @@
 %%
 %%
 %% @PRIVATE
-%%  ets:match(files, '_').
-%%	ets:match(files, {'$1',none},1).
-%%	ets:select_count(files, ['_',[],[true]}]).
-%%	ets:info(files, size).
+
 -module(websocket_app).
 -behaviour(application).
 -include_lib("kernel/include/file.hrl").
@@ -14,9 +11,9 @@
 -define(DstIp, "1.2.4.2").
 -define(AvailablePorts, [11112,11113,11114,11115,11116]).
 -define(PacketSize, 1408).
--define(Folder,"c:/folder1").
+-define(ToDoFolder,"c:/f1").
+-define(CompletedFolder,"c:/f2").
 
-%% API.
 -export([start/2, stop/1, dir_loop/0, file_loop/0, file_prep/0, read_loop/0]).
 
 %% API.
@@ -52,12 +49,7 @@ start(_Type, _Args) ->
 		[{env, [{dispatch, Dispatch}]}]),
 	websocket_sup:start_link().
 
-%% Trying to get list of files.
-%% In Dir var we get list with format:
-%% filename1.ext
-%% filename2.ext
-%% ...
-%% Then send each filename to file_loop function
+%% Point: Periodic scan files in ToDoFolder
 dir_loop() ->
 	receive
 		stop ->
@@ -67,7 +59,7 @@ dir_loop() ->
 		after 3000 ->
 			case ets:info(files, size) of
 				0 ->	
-					NumFiles = filelib:fold_files( ?Folder,".*",true,
+					NumFiles = filelib:fold_files( ?ToDoFolder,".*",true,
 								fun(File2, Acc) ->
 									%%io:format("Files ~p~n", [File2]), 
 									ets:insert(files, {File2, {status,none}}),
@@ -77,23 +69,15 @@ dir_loop() ->
 				NumFiles ->
 					io:format("No re-read dir, because files in work: ~p~n", [NumFiles])
 			end
-			%%dir_loop()
+			%% dir_loop()
 end.
 
-%%ets:select(files, ['_',[],[true]]).
-%%	ets:match(files, {'$1',none},1).
-%% ets:match(program, '$1').
-%% ets:match(files, {'$1',{status,reading},{pid,'$2'}},1).
-%% ets:delete_object(files,)
-%% Preparation to put file into work.
-%% Check it if it is not in process now. 
-%% If all good, put it in ets table and send {filename, FileName, Dir} to file_prep function.
-
+%% Point: Periodic scan files in file table
 file_loop() ->
 	receive
 		stop ->
 			void
-		after 100 ->
+		after 1000 ->
 			case ets:match(files, {'$1',{status, none}},1) of
 				{[[File]],_} ->
 					io:format("Start preparation for file: ~p~n", [File]),
@@ -107,38 +91,36 @@ file_loop() ->
 			%%ets:insert(files, {Fi,ttt}),
 			file_loop()
 end.
-%% Trying to open file, lock file, get the file properties. 
-%% If good then start sending read data through data socket and spawn read_loop function for this file.
+
+%% Point: Spawn read_loop fun, and before this, look over nonbusy ports
+%% Awarness: Posible delay queue on busy ports
 file_prep() ->
 	receive
 		stop ->
 			exit(omg);
 		{filename, File} ->
-
 			Pid = spawn(fun() -> read_loop() end),
 			lists:foreach(fun(E) -> E end, 
 			lists:takewhile(fun(E) -> case gen_udp:open(E, [binary,{active, false}]) of 
-										{ok, Socket} ->
-											io:format("Success test socket with port: ~p~n",[E]),
-											gen_udp:close(Socket),
-											ets:insert(files, {File,{status,reading},{pid,Pid},{port,E}}),
-											false;
-										{error, Reason} ->
-											io:format("Could not open port: ~p, reason: ~p~n",[E,Reason]),
-											true;
-										_ ->
-											true
-									end
-			 						end, ?AvailablePorts)),
-
- 			%% [{_,{_,CtrlSocket}}] = ets:lookup(program, data),
-
+											{ok, Socket} ->
+												io:format("Success test socket with port: ~p~n",[E]),
+												gen_udp:close(Socket),
+												ets:insert(files, {File,{status,reading},{pid,Pid},{port,E}}),
+												false;
+											{error, Reason} ->
+												io:format("Could not open port: ~p, reason: ~p~n",[E,Reason]),
+												true;
+											_ ->
+												true
+										end
+				 						end, ?AvailablePorts)),
 			Pid ! {start,File};
 		Any ->
 			io:format("file_work error... ~p~n",[Any])
 	end.
-
-
+	
+%% Point: Send chunk of file through websocket and udpm close and others...
+%% Awarness: Exit fun on error opening file, for delay them
 read_loop() ->
 	receive
 		{ok,Device,Digest,Socket,Port} ->
@@ -154,10 +136,13 @@ read_loop() ->
 					case file:close(Device) of
 						ok ->
 							[{_,{_,CtrlSocket}}] = ets:lookup(program, data),
-							io:format("Close file.~n"),
+							%% io:format("Close file.~n"),
 							gen_udp:send(CtrlSocket,?DstIp,?ControlPort,list_to_binary(integer_to_list(Digest))),
 							case ets:match(files, {'$1',{status,reading},{pid,self()},{port,'_'}},1) of
 								{[[FileToClose]],_} ->
+									FileToMove = filename:join(lists:append([?CompletedFolder],lists:nthtail(erlang:length(filename:split(?ToDoFolder)),filename:split(FileToClose)))),
+									filelib:ensure_dir(FileToMove),
+									file:rename(FileToClose,FileToMove),
 									ets:delete(files,FileToClose),
 									io:format("Success close file, checksum is: ~p~n",[Digest]),
 									%% gproc:send({p,l, ws},{self(),ws,"checksum " ++ io_lib:format("~p",[Digest])}),
@@ -167,8 +152,8 @@ read_loop() ->
 								['$end_of_table'] ->
 									io:format("Error. No file to close.~n")
 							end;
-						{error, Reason} ->
-							io:format("Error close file: ~p~n", [Reason]),
+						AnyFileErr ->
+							io:format("Error close file: ~p~n", [AnyFileErr]),
 							exit(error_eof)
 					end,
 					
@@ -176,24 +161,19 @@ read_loop() ->
 						ok ->
 							io:format("Success close data socket: ~p~n",[Socket]),
 							exit(all_good);
-						Any ->
-							io:format("Error close data socket: ~p~n",[Any])
+						AnyUdpErr ->
+							io:format("Error close data socket: ~p~n",[AnyUdpErr])
 					end;
-				{error, Error} -> 
-					io:format("Error2 read file: ~p~n", [Error]),
-					ets:insert(file_tab, {current_file, ""}),
-					exit(error_read);
-				Any -> 
-					 io:format("Oops2: ~p~n", [Any]),
-					 ets:insert(file_tab, {current_file, ""}),
-					 exit(oops2)
+				ReadError -> 
+					 io:format("Error reading: ~p~n", [ReadError]),
+					 exit(read_error)
 			end;
 		{start,File} ->
 			Device = case file:open(File, [read,raw,binary]) of
-						{ok, D} ->
-							D;
-						A ->
-							io:format("Error. Can't open file.~p~n",[A]),
+						{ok, FileDevice} ->
+							FileDevice;
+						FileOpenError ->
+							io:format("Retry. Can't open file ~p Error: ~p~n",[File, FileOpenError]),
 							ets:delete(files,File),
 							exit(cant_open_file)
 						end,
@@ -201,9 +181,10 @@ read_loop() ->
 				{ok, FileData} ->
 					io:format("Success read file_info: ~p Size: ~p~n", [File, FileData#file_info.size]),
 					FileData#file_info.size;
-				{error, Error} ->
-					io:format("Error read file_info: ~p. Error: ~p~n", [File, Error]),
-					file_prep()
+				FileReadInfoError ->
+					io:format("Retry. Can't read file_info: ~p Error: ~p~n", [File, FileReadInfoError]),
+					ets:delete(files,File),
+					exit(file_read_info_error)
 			end,
 			[{_,{_,CtrlSocket}}] = ets:lookup(program, data),
 			[{_, {status,reading},{pid,_},{port,Port}}] = ets:lookup(files,File),
@@ -221,40 +202,43 @@ read_loop() ->
 				eof ->
 					case file:close(Device) of
 						ok ->
-		
 							gen_udp:send(CtrlSocket,?DstIp,?ControlPort,"empty"),
 							gproc:send({p,l, ws},{self(),ws,"Empty file"}),
 							case ets:match(files, {'$1',{status,reading},{pid,self()},{port,'_'}},1) of
 								{[[FileToClose]],_} ->
+									FileToMove = filename:join(lists:append([?CompletedFolder],lists:nthtail(erlang:length(filename:split(?ToDoFolder)),filename:split(FileToClose)))),
+									filelib:ensure_dir(FileToMove),
+									file:rename(FileToClose,FileToMove),
 									ets:delete(files,FileToClose),
 									io:format("Success close empty file.~n");
 								['$end_of_table'] ->
-									io:format("Error. No empty file to close.~n")
+									io:format("Error. No empty file to close.~n"),
+									exit(file_read_algoritm_error)
 							end;
-						B ->
-							io:format("Error. Can't close empty file.~p",[B]),
-							ts:delete(files,File),
-							exit(file_error)
+						FileCloseError ->
+							io:format("Error. Can't close empty file ~p Error: ~p~n",[File, FileCloseError]),
+							ets:delete(files,File),
+							exit(file_close_error)
 					end,
 					
 					case gen_udp:close(Socket) of
 						ok ->
 							io:format("Success close empty socket: ~p~n",[Socket]);
-						Any ->
-							io:format("Error close empty socket: ~p~n",[Any])
+						UdpCloseError ->
+							io:format("Error close empty socket: ~p~n",[UdpCloseError])
 					end;
-				Any -> 
+				FileReadError -> 
 					case ets:match(files, {'$1',{status,reading},{pid,self()},{port,'_'}},1) of
 						{[[FileToClose]],_} ->
 							ets:delete(files,FileToClose),
-							io:format("Read Error: ~p~n", [Any]);
+							io:format("Read Error: ~p~n", [FileReadError]);
 						['$end_of_table'] ->
 							io:format("Error. No empty file to close.~n")
 					end,
-					exit(oops)
+					exit(file_read_error)
 			end;			
-		Any ->
-			io:format("read_loop error: ~p~n",[Any]),
+		AlgoritmError ->
+			io:format("Algoritm read_loop error: ~p~n",[AlgoritmError]),
 			exit(read_loop_error)
 	end.
 
