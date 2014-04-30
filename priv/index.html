@@ -76,19 +76,6 @@
 							files[files.length-1].tr.appendChild(files[files.length-1].td3);
 							files[files.length-1].tr.appendChild(files[files.length-1].td4);
 							files[files.length-1].tr.appendChild(files[files.length-1].td5);
-							// files[files.length-1].name = document.createElement('span');
-							// files[files.length-1].name.innerHTML = evt.data.slice(6,received_msg.length-1);
-							// files[files.length-1].size = document.createElement('textarea');
-							// // files[files.length-1].size.setAttribute = ('style', 'width:10px;height:10px;font-family:cursive;border:dotted 10px #6DB72C;');
-							// files[files.length-1].size.style.width = "10px";
-							// files[files.length-1].size.style.resize = "none";
-							// files[files.length-1].size.style.overflow = "hidden";
-							// files[files.length-1].size.innerHTML = "0/0";
-							// ni.appendChild(files[files.length-1].bar);
-							// ni.appendChild(files[files.length-1].size);
-							// ni.appendChild(files[files.length-1].name);
-							// ni.appendChild(document.createElement('br'));
-
 
 				            break;
 				case "s": 
@@ -96,13 +83,6 @@
 							Size = evt.data.slice(5,received_msg.length);
 							console.log("Recv " + received_msg);
 							files[Id].bar.setAttribute('max',evt.data.slice(5,received_msg.length));
-							//if (received_msg.length < 11) {
-							//	NewSize = Math.floor(parseInt(evt.data.slice(5,received_msg.length)) / 1024);
-							//	NewSize = NewSize + " kb";
-							//	} else {
-							//	NewSize = Math.floor(parseInt(evt.data.slice(5,received_msg.length)) / 1048576);
-							//	NewSize = NewSize + " mb";
-							//	}
 							switch(Size.toString().length)
 							{
 							case 1:	
@@ -130,9 +110,6 @@
 				case "p": 
 							console.log("Recv " + received_msg);
 							OpenNew(received_msg.slice(5,10),files.length-1);
-							// filesize = parseInt(received_msg.slice(5,received_msg.length));
-							// filecount = 100/(filesize/1408);
-							// console.log("Recv size: " + received_msg);
 				            break;
 				case "c": 
 							console.log("Recv " + evt.data);
@@ -190,31 +167,18 @@
 				switch (strr)
 				{
 				case "1": 
-							// console.log("Recv data port " + Port + " " + evt.data);
-							sockets[Port].bar.value = sockets[Port].bar.value + 1408;
-							sockets[Port].recv = sockets[Port].recv + 1408;
-							Sum = sockets[Port].recv;
-							if ( Sum.toString().length < 7) {
-								Sum = Math.floor(Sum / 1024) + " kb";
-								files[Id].td3.innerHTML = Sum;	
-								}else{
-								Sum = Math.floor(Sum / 1048576) + " mb";
-								files[Id].td3.innerHTML = Sum;
-								}
-							
-							// barvalue = barvalue + filecount;
-							// bar.value = barvalue;
-				   			// break;
-							// filesize = parseInt(received_msg.slice(5,received_msg.length));
-							// filecount = 100/(filesize/1408);
-							// console.log("Recv size: " + received_msg);
-				            break;
-				// case "c": 
-				// 			console.log("Recv NEW " + evt.data);
-				// 			filesize = 0;
-				// 			filecount = 0;
-				// 			barvalue = 0;
-				//             break;
+					// console.log("Recv data port " + Port + " " + evt.data);
+					sockets[Port].bar.value = sockets[Port].bar.value + 1408;
+					sockets[Port].recv = sockets[Port].recv + 1408;
+					Sum = sockets[Port].recv;
+					if ( Sum.toString().length < 7) {
+						Sum = Math.floor(Sum / 1024) + " kb";
+						files[Id].td3.innerHTML = Sum;	
+						}else{
+						Sum = Math.floor(Sum / 1048576) + " mb";
+						files[Id].td3.innerHTML = Sum;
+						}
+		            break;
 				default: console.log("Recv debug port " + Port + " " + evt.data);
 				}
 			};
