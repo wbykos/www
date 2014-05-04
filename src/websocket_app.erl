@@ -8,7 +8,7 @@
 -include_lib("kernel/include/file.hrl").
 
 -define(ControlPort, 11111).
--define(DstIp, "1.2.4.2").
+-define(DstIp, "1.2.4.129").
 -define(AvailablePorts, [11112,11113,11114,11115,11116]).
 -define(PacketSize, 1408).
 -define(ToDoFolder,"c:/f1").
@@ -185,10 +185,17 @@ read_loop() ->
 			[{_,{_,CtrlSocket}}] = ets:lookup(program, data),
 			[{_, {status,reading},{pid,_},{port,Port}}] = ets:lookup(files,File),
 			{ok, Socket} = gen_udp:open(Port, [binary,{active, false}]),
-			gen_udp:send(CtrlSocket,?DstIp,?ControlPort,term_to_binary({File,Filesize})),
+			%% gen_udp:send(CtrlSocket,?DstIp,?ControlPort,term_to_binary({File,Filesize})),
+			gen_udp:send(CtrlSocket,?DstIp,?ControlPort,erlang:iolist_to_binary([<<"file">>, erlang:list_to_binary(File)])),
+			timer:sleep(500),
+			gen_udp:send(CtrlSocket,?DstIp,?ControlPort,erlang:iolist_to_binary([<<"port">>, erlang:integer_to_binary(Port)])),
+			timer:sleep(500),
+			gen_udp:send(CtrlSocket,?DstIp,?ControlPort,erlang:iolist_to_binary([<<"size">>, erlang:integer_to_binary(Filesize)])),
+			timer:sleep(500),
 			gproc:send({p,l, ws},{self(),ws,"file " ++ io_lib:format("~p",[File])}),
 			gproc:send({p,l, ws},{self(),ws,"size " ++ io_lib:format("~p",[Filesize])}),
 			gproc:send({p,l, ws},{self(),ws,"port " ++ io_lib:format("~p",[Port])}),
+
 			case file:read(Device, ?PacketSize) of
 				{ok, Data} -> 
 					%% io:format("Send data sock~p~n",[Data]),
@@ -268,9 +275,9 @@ overhead(NewSequence,NewCRC) ->
 	{ok,OverHead}.
 
 move_and_clean(FileToClose) ->
-	FileToMove = filename:join(lists:append([?CompletedFolder],lists:nthtail(erlang:length(filename:split(?ToDoFolder)),filename:split(FileToClose)))),
-	filelib:ensure_dir(FileToMove),
-	file:rename(FileToClose,FileToMove),
+	%% FileToMove = filename:join(lists:append([?CompletedFolder],lists:nthtail(erlang:length(filename:split(?ToDoFolder)),filename:split(FileToClose)))),
+	%% filelib:ensure_dir(FileToMove),
+	%% file:rename(FileToClose,FileToMove),
 	ets:delete(files,FileToClose),
 	ok.
 
