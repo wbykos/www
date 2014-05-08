@@ -13,8 +13,10 @@
 -define(PacketSize, 1408).
 -define(ToDoFolder,"c:/f1").
 -define(CompletedFolder,"c:/f2").
+-define(Pushups, 768).
+-define(RestForPushups,500).
 
--export([start/2, stop/1, dir_loop/0, file_loop/0, file_prep/0, read_loop/0,overhead/2,move_and_clean/1]).
+-export([start/2, stop/1, dir_loop/0, file_loop/0, zero_fill/2, file_prep/0, read_loop/0, overhead/2, move_and_clean/1]).
 
 %% API.
 start(_Type, _Args) ->
@@ -101,7 +103,7 @@ file_prep() ->
 		{filename, File} ->
 			Pid = spawn(fun() -> read_loop() end),
 			lists:foreach(fun(E) -> E end, 
-			lists:takewhile(fun(E) -> case gen_udp:open(E, [binary,{active, false}]) of 
+			lists:takewhile(fun(E) -> case gen_udp:open(E, [binary,{active, false},{sndbuf, 16438000}]) of 
 											{ok, Socket} ->
 												io:format("Success test socket with port: ~p~n",[E]),
 												gen_udp:close(Socket),
@@ -118,7 +120,7 @@ file_prep() ->
 		Any ->
 			io:format("file_work error... ~p~n",[Any])
 	end.
-%% Point: Send chunk of file through websocket and udp then close and others...
+%% Point: Send chunk of file through udp and then close and others...
 %% Awarness: Selfexit from fun on error opening file, for delay them
 read_loop() ->
 	receive
@@ -126,6 +128,12 @@ read_loop() ->
 			case file:read(Device, ?PacketSize) of
 				{ok, Data} -> 
 					NewSequence = Sequence + 1,
+					case 0 =:= NewSequence rem ?Pushups of
+						true ->
+							timer:sleep(?RestForPushups);
+						_ ->
+							void
+					end,
 					NewCRC = erlang:crc32(CRC, Data),
 					{ok, OverHead} = overhead(NewSequence,NewCRC),
 					gproc:send({p,l, Port},{self(),Port, integer_to_list(?PacketSize)}),
@@ -137,11 +145,12 @@ read_loop() ->
 						ok ->
 							[{_,{_,CtrlSocket}}] = ets:lookup(program, data),
 							%% io:format("Close file.~n"),
-							gen_udp:send(CtrlSocket,?DstIp,?ControlPort,list_to_binary(integer_to_list(CRC))),
 							case ets:match(files, {'$1',{status,reading},{pid,self()},{port,'_'}},1) of
 								{[[FileToClose]],_} ->
 									ok = move_and_clean(FileToClose),
 									io:format("Success close file, checksum is: ~p~n",[CRC]),
+									Info2 = erlang:iolist_to_binary([<<"0">>,zero_fill(erlang:size(unicode:characters_to_binary(FileToClose,unicode)),3),unicode:characters_to_binary(FileToClose,unicode),zero_fill(erlang:size(erlang:integer_to_binary(CRC)),12),erlang:integer_to_binary(CRC)]), 
+									gen_udp:send(CtrlSocket,?DstIp,?ControlPort,Info2),
 									%% gproc:send({p,l, ws},{self(),ws,"checksum " ++ io_lib:format("~p",[CRC])}),
 									%% gproc:send({p,l, 11112},{self(),11112,"checksum " ++ io_lib:format("~p",[CRC])});
 									%% gproc:send({p,l,Port},{self(),Port, "close port " ++  io_lib:format("~p",[Port]) ++ " checksum " ++ io_lib:format("~p",[CRC])}),
@@ -184,14 +193,11 @@ read_loop() ->
 			end,
 			[{_,{_,CtrlSocket}}] = ets:lookup(program, data),
 			[{_, {status,reading},{pid,_},{port,Port}}] = ets:lookup(files,File),
-			{ok, Socket} = gen_udp:open(Port, [binary,{active, false}]),
-			%% gen_udp:send(CtrlSocket,?DstIp,?ControlPort,term_to_binary({File,Filesize})),
-			gen_udp:send(CtrlSocket,?DstIp,?ControlPort,erlang:iolist_to_binary([<<"file">>, erlang:list_to_binary(File)])),
+			{ok, Socket} = gen_udp:open(Port, [binary,{active, false},{sndbuf, 16438000}]),
+			Info = erlang:iolist_to_binary([<<"1">>,zero_fill(erlang:size(unicode:characters_to_binary(File,unicode)),3),unicode:characters_to_binary(File,unicode),zero_fill(erlang:size(erlang:integer_to_binary(Filesize)),12),erlang:integer_to_binary(Filesize),erlang:integer_to_binary(Port)]), 
+			gen_udp:send(CtrlSocket,?DstIp,?ControlPort,Info),
 			timer:sleep(500),
-			gen_udp:send(CtrlSocket,?DstIp,?ControlPort,erlang:iolist_to_binary([<<"port">>, erlang:integer_to_binary(Port)])),
-			timer:sleep(500),
-			gen_udp:send(CtrlSocket,?DstIp,?ControlPort,erlang:iolist_to_binary([<<"size">>, erlang:integer_to_binary(Filesize)])),
-			timer:sleep(500),
+			io:format("Info ~p~n",[Info]),
 			gproc:send({p,l, ws},{self(),ws,"file " ++ io_lib:format("~p",[File])}),
 			gproc:send({p,l, ws},{self(),ws,"size " ++ io_lib:format("~p",[Filesize])}),
 			gproc:send({p,l, ws},{self(),ws,"port " ++ io_lib:format("~p",[Port])}),
@@ -244,27 +250,9 @@ read_loop() ->
 	end.
 
 overhead(NewSequence,NewCRC) ->
-	B1 = erlang:list_to_binary(erlang:integer_to_list(NewSequence)),
-	case erlang:iolist_size(B1) of
-		1 ->
-			OverHeadSequence = <<<<"0000000">>/binary,B1/binary>>;
-		2 ->
-			OverHeadSequence = <<<<"000000">>/binary,B1/binary>>;
-		3 ->
-			OverHeadSequence = <<<<"00000">>/binary,B1/binary>>;
-		4 ->
-			OverHeadSequence = <<<<"0000">>/binary,B1/binary>>;
-		5 ->
-			OverHeadSequence = <<<<"000">>/binary,B1/binary>>;
-		6 ->
-			OverHeadSequence = <<<<"00">>/binary,B1/binary>>;
-		7 ->
-			OverHeadSequence = <<<<"0">>/binary,B1/binary>>;
-		8 ->
-			OverHeadSequence = <<B1/binary>>
-	end,
-	OverHeadCRC = erlang:list_to_binary(erlang:integer_to_list(NewCRC)),
-	OverHeadCRCsize = erlang:list_to_binary(erlang:integer_to_list(erlang:iolist_size(OverHeadCRC))),
+	OverHeadSequence = zero_fill(NewSequence,8), 
+	OverHeadCRC = erlang:integer_to_binary(NewCRC),
+	OverHeadCRCsize = erlang:integer_to_binary(erlang:iolist_size(OverHeadCRC)),
 	case {erlang:iolist_size(OverHeadCRC) =< 9} of
 		{true} ->
 			OverHead = <<OverHeadSequence/binary,<<"0">>/binary, OverHeadCRCsize/binary, OverHeadCRC/binary>>;
@@ -274,12 +262,26 @@ overhead(NewSequence,NewCRC) ->
 	io:format("Send data...~p~n",[OverHead]),
 	{ok,OverHead}.
 
+zero_fill(Number, Size) ->
+	case type_of(Number) of
+		integer ->
+			B1 = erlang:integer_to_binary(Number);
+		binary ->
+			B1 = Number
+	end,
+	B2 = erlang:list_to_binary(string:copies("0",Size - erlang:size(B1))),
+	B3 = <<B2/binary,B1/binary>>,
+	B3.
+
 move_and_clean(FileToClose) ->
 	%% FileToMove = filename:join(lists:append([?CompletedFolder],lists:nthtail(erlang:length(filename:split(?ToDoFolder)),filename:split(FileToClose)))),
 	%% filelib:ensure_dir(FileToMove),
 	%% file:rename(FileToClose,FileToMove),
 	ets:delete(files,FileToClose),
 	ok.
+
+type_of(X) when is_integer(X)   -> integer;
+type_of(X) when is_binary(X)    -> binary.
 
 stop(_State) ->
 	ok.
