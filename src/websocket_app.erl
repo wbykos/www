@@ -197,11 +197,14 @@ read_loop() ->
 					ets:delete(files,File),
 					exit(file_read_info_error)
 			end,
+			[{_, {status,reading},{pid,_},{port,Port}}] = ets:lookup(files,File),
+			self ! {readchunk,Device,Port},
+			read_loop();
+		{readchunk,Device,Port} ->
 			case file:read(Device, 8192) of
-				{ok, ChunkData} -> 
+				{ok, ChunkData} ->
 					[{_,{_,CtrlSocket}}] = ets:lookup(program, data),
-					[{_, {status,reading},{pid,_},{port,Port}}] = ets:lookup(files,File),
-					{ok, Socket} = gen_udp:open(Port, [binary,{active, false},{sndbuf, 99438000}]),
+					%% {ok, Socket} = gen_udp:open(Port, [binary,{active, false},{sndbuf, 99438000}]),
 					Info = erlang:iolist_to_binary([<<"1">>,zero_fill(erlang:size(unicode:characters_to_binary(File,unicode)),3),unicode:characters_to_binary(File,unicode),zero_fill(erlang:size(erlang:integer_to_binary(Filesize)),12),erlang:integer_to_binary(Filesize),erlang:integer_to_binary(Port)]), 
 					gen_udp:send(CtrlSocket,?DstIp,?ControlPort,Info),
 					timer:sleep(500),
@@ -209,7 +212,8 @@ read_loop() ->
 					gproc:send({p,l, ws},{self(),ws,"file " ++ io_lib:format("~p",[File])}),
 					gproc:send({p,l, ws},{self(),ws,"size " ++ io_lib:format("~p",[Filesize])}),
 					gproc:send({p,l, ws},{self(),ws,"port " ++ io_lib:format("~p",[Port])}),
-					spawn(?MODULE, send_chunk,[ChunkData,Port,self()]);
+					spawn(?MODULE, send_chunk,[ChunkData,Port,self()]),
+					read_loop();
 				eof ->
 					case file:close(Device) of
 						ok ->
@@ -243,9 +247,7 @@ read_loop() ->
 							io:format("Error. No empty file to close.~n")
 					end,
 					exit(file_read_error)
-			end,
-			
-			read_loop;
+			end;
 		{done,Pid} ->
 			io:format("Done~p~n",[Pid]);		
 		UnknownData ->
