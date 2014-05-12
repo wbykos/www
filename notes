@@ -48,3 +48,20 @@ filelib:fold_files( ?ToDoFolder,".*",true,
 
 
 %%hexstring(<<X:128/big-unsigned-integer>>) -> lists:flatten(io_lib:format("~32.16.0b", [X])).
+
+
+ [gen_udp:send(Sock,Addr,Port,PieceOfSh) || <<PieceOfSh:1024/binary>> <= Bytes].
+
+ send(<<Piece:1024/binary, Rest/binary>>) -> gen_udp:send(Sock, Addr, Port, Piece), send(Rest);
+send(Data) -> gen_udp:send(Sock, Addr, Port, Piece).
+
+1> pcap:getifaddrs().
+{ok,[{"\\Device\\NPF_{F0B679AE-9F31-44C4-8EFF-0914F5132A2F}",
+      [{description,"VMware Accelerated AMD PCNet Adapter (Microsoft's Packet Sc
+heduler) "},
+       {addr,{1,2,4,128}},
+       {netmask,{255,255,255,0}},
+       {broadaddr,{255,255,255,255}}]},
+     {"\\Device\\NPF_{C506B077-806C-40A6-A5DD-895661BE83A9}",
+      [{description,"TAP-Windows Adapter V9 (Microsoft's Packet Scheduler) "}]}]
+}

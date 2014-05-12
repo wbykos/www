@@ -1,0 +1,1 @@
+"C:\Program Files\erl6.0\bin\erl.exe" -smp -pa ebin

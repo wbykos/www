@@ -6,9 +6,12 @@
 -module(websocket_app).
 -behaviour(application).
 -include_lib("kernel/include/file.hrl").
+-include_lib("pkt/include/pkt.hrl").
+-include_lib("eunit/include/eunit.hrl").
+
 
 -define(ControlPort, 11111).
--define(DstIp, "1.2.4.129").
+-define(DstIp, "10.241.26.60").
 -define(AvailablePorts, [11112,11113,11114,11115,11116]).
 -define(PacketSize, 1408).
 -define(ToDoFolder,"c:/f1").
@@ -16,7 +19,7 @@
 -define(Pushups, 768).
 -define(RestForPushups,500).
 
--export([start/2, stop/1, dir_loop/0, file_loop/0, zero_fill/2, file_prep/0, read_loop/0, overhead/2, move_and_clean/1]).
+-export([start/2, stop/1, dir_loop/0, file_loop/0, zero_fill/2, file_prep/0, read_loop/0, overhead/2, move_and_clean/1, send_chunk/3]).
 
 %% API.
 start(_Type, _Args) ->
@@ -108,6 +111,7 @@ file_prep() ->
 												io:format("Success test socket with port: ~p~n",[E]),
 												gen_udp:close(Socket),
 												ets:insert(files, {File,{status,reading},{pid,Pid},{port,E}}),
+												Pid ! {start,File},
 												false;
 											{error, Reason} ->
 												io:format("Could not open port: ~p, reason: ~p~n",[E,Reason]),
@@ -115,8 +119,7 @@ file_prep() ->
 											_ ->
 												true
 										end
-				 						end, ?AvailablePorts)),
-			Pid ! {start,File};
+				 						end, ?AvailablePorts));
 		Any ->
 			io:format("file_work error... ~p~n",[Any])
 	end.
@@ -124,7 +127,7 @@ file_prep() ->
 %% Awarness: Selfexit from fun on error opening file, for delay them
 read_loop() ->
 	receive
-		{ok,Device,CRC,Socket,Port,Sequence} ->
+		{ok,Device,CRC,Socket,Port,Sequence,Ss} ->
 			case file:read(Device, ?PacketSize) of
 				{ok, Data} -> 
 					NewSequence = Sequence + 1,
@@ -136,9 +139,11 @@ read_loop() ->
 					end,
 					NewCRC = erlang:crc32(CRC, Data),
 					{ok, OverHead} = overhead(NewSequence,NewCRC),
-					gproc:send({p,l, Port},{self(),Port, integer_to_list(?PacketSize)}),
-					gen_udp:send(Socket,?DstIp,Port,<<OverHead/binary,Data/binary>>),
-					self() ! {ok,Device,NewCRC,Socket,Port,NewSequence},
+					%% gproc:send({p,l, Port},{self(),Port, integer_to_list(?PacketSize)}),
+					%% gen_udp:send(Socket,?DstIp,Port,<<OverHead/binary,Data/binary>>),
+					K1 = [erlang:list_to_integer(K, 16) || K <- ["8c","89","a5","c7","f9","14","8c","89","a4","32","4d","d7","08","00","45","00","00","3c","0e","ec","00","00","80","11","e1","89","0a","f1","1a","1e","0a","f1","1a","3c","2b","68","2b","68","00","08","ba","bf"]],
+					ewpcap:write(Ss, [K1,<<OverHead/binary,Data/binary>>]),
+					self() ! {ok,Device,NewCRC,Socket,Port,NewSequence,Ss},
 					read_loop();
 				eof ->
 					case file:close(Device) of
@@ -151,6 +156,7 @@ read_loop() ->
 									io:format("Success close file, checksum is: ~p~n",[CRC]),
 									Info2 = erlang:iolist_to_binary([<<"0">>,zero_fill(erlang:size(unicode:characters_to_binary(FileToClose,unicode)),3),unicode:characters_to_binary(FileToClose,unicode),zero_fill(erlang:size(erlang:integer_to_binary(CRC)),12),erlang:integer_to_binary(CRC)]), 
 									gen_udp:send(CtrlSocket,?DstIp,?ControlPort,Info2),
+									io:format("Success close~p~n",[ewpcap:stats(Ss)]),
 									%% gproc:send({p,l, ws},{self(),ws,"checksum " ++ io_lib:format("~p",[CRC])}),
 									%% gproc:send({p,l, 11112},{self(),11112,"checksum " ++ io_lib:format("~p",[CRC])});
 									%% gproc:send({p,l,Port},{self(),Port, "close port " ++  io_lib:format("~p",[Port]) ++ " checksum " ++ io_lib:format("~p",[CRC])}),
@@ -191,25 +197,19 @@ read_loop() ->
 					ets:delete(files,File),
 					exit(file_read_info_error)
 			end,
-			[{_,{_,CtrlSocket}}] = ets:lookup(program, data),
-			[{_, {status,reading},{pid,_},{port,Port}}] = ets:lookup(files,File),
-			{ok, Socket} = gen_udp:open(Port, [binary,{active, false},{sndbuf, 16438000}]),
-			Info = erlang:iolist_to_binary([<<"1">>,zero_fill(erlang:size(unicode:characters_to_binary(File,unicode)),3),unicode:characters_to_binary(File,unicode),zero_fill(erlang:size(erlang:integer_to_binary(Filesize)),12),erlang:integer_to_binary(Filesize),erlang:integer_to_binary(Port)]), 
-			gen_udp:send(CtrlSocket,?DstIp,?ControlPort,Info),
-			timer:sleep(500),
-			io:format("Info ~p~n",[Info]),
-			gproc:send({p,l, ws},{self(),ws,"file " ++ io_lib:format("~p",[File])}),
-			gproc:send({p,l, ws},{self(),ws,"size " ++ io_lib:format("~p",[Filesize])}),
-			gproc:send({p,l, ws},{self(),ws,"port " ++ io_lib:format("~p",[Port])}),
-
-			case file:read(Device, ?PacketSize) of
-				{ok, Data} -> 
-					%% io:format("Send data sock~p~n",[Data]),
-					CRC = erlang:crc32(Data),
-					{ok, OverHead} = overhead(1,CRC),
-					gen_udp:send(Socket,?DstIp,Port,<<OverHead/binary,Data/binary>>),
-					self() ! {ok,Device,CRC,Socket,Port,1},
-					read_loop();
+			case file:read(Device, 8192) of
+				{ok, ChunkData} -> 
+					[{_,{_,CtrlSocket}}] = ets:lookup(program, data),
+					[{_, {status,reading},{pid,_},{port,Port}}] = ets:lookup(files,File),
+					{ok, Socket} = gen_udp:open(Port, [binary,{active, false},{sndbuf, 99438000}]),
+					Info = erlang:iolist_to_binary([<<"1">>,zero_fill(erlang:size(unicode:characters_to_binary(File,unicode)),3),unicode:characters_to_binary(File,unicode),zero_fill(erlang:size(erlang:integer_to_binary(Filesize)),12),erlang:integer_to_binary(Filesize),erlang:integer_to_binary(Port)]), 
+					gen_udp:send(CtrlSocket,?DstIp,?ControlPort,Info),
+					timer:sleep(500),
+					io:format("Info ~p~n",[Info]),
+					gproc:send({p,l, ws},{self(),ws,"file " ++ io_lib:format("~p",[File])}),
+					gproc:send({p,l, ws},{self(),ws,"size " ++ io_lib:format("~p",[Filesize])}),
+					gproc:send({p,l, ws},{self(),ws,"port " ++ io_lib:format("~p",[Port])}),
+					spawn(?MODULE, send_chunk,[ChunkData,Port,self()]);
 				eof ->
 					case file:close(Device) of
 						ok ->
@@ -234,7 +234,7 @@ read_loop() ->
 						UdpCloseError ->
 							io:format("Error close empty socket: ~p~n",[UdpCloseError])
 					end;
-				FileReadError -> 
+				FileReadError ->
 					case ets:match(files, {'$1',{status,reading},{pid,self()},{port,'_'}},1) of
 						{[[FileToClose]],_} ->
 							ets:delete(files,FileToClose),
@@ -243,10 +243,15 @@ read_loop() ->
 							io:format("Error. No empty file to close.~n")
 					end,
 					exit(file_read_error)
-			end;			
-		AlgorithmError ->
-			io:format("Algorithm read_loop error: ~p~n",[AlgorithmError]),
-			exit(read_loop_error)
+			end,
+			
+			read_loop;
+		{done,Pid} ->
+			io:format("Done~p~n",[Pid]);		
+		UnknownData ->
+			io:format("Algorithm read_loop unknown data: ~p~n",[UnknownData]),
+			%%exit(read_loop_error)
+			read_loop()
 	end.
 
 overhead(NewSequence,NewCRC) ->
@@ -259,7 +264,7 @@ overhead(NewSequence,NewCRC) ->
 		{false} ->
 			OverHead = <<OverHeadSequence/binary,OverHeadCRCsize/binary, OverHeadCRC/binary>>
 	end,
-	io:format("Send data...~p~n",[OverHead]),
+	%% io:format("Send data...~p~n",[OverHead]),
 	{ok,OverHead}.
 
 zero_fill(Number, Size) ->
@@ -279,6 +284,16 @@ move_and_clean(FileToClose) ->
 	%% file:rename(FileToClose,FileToMove),
 	ets:delete(files,FileToClose),
 	ok.
+
+send_chunk(Data,Port,Pid) ->
+		{ok, Socket} = ewpcap:open("\\Device\\NPF_{A79E0D8C-FD36-42F4-892D-B4214EB2B9F2}", [{filter, "icmp"},{buffer, 99438000}]),
+		K1 = [erlang:list_to_integer(K, 16) || K <- ["8c","89","a5","c7","f9","14","8c","89","a4","32","4d","d7","08","00","45","00","00","3c","0e","ec","00","00","80","11","e1","89","0a","f1","1a","1e","0a","f1","1a","3c","2b","68","2b","68","00","08","ba","bf"]],
+		CRC = erlang:crc32(Data),
+		{ok, OverHead} = overhead(1,CRC),
+		[ewpcap:write(Socket,[K1,<<OverHead/binary,PieceOfSh/binary>>]) || <<PieceOfSh:1400/binary>> <= Data],
+		io:format("EDone~p~n",[self()]),
+		Pid ! {done,self()}.
+
 
 type_of(X) when is_integer(X)   -> integer;
 type_of(X) when is_binary(X)    -> binary.

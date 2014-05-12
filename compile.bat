@@ -1,1 +1,1 @@
-"C:\Program Files\erl6.0\erts-6.0\bin\escript.exe" rebar compile
+"C:\Program Files (x86)\erl6.0\erts-6.0\bin\escript.exe" rebar compile
