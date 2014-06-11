@@ -22,7 +22,7 @@
 -define(Head,[erlang:list_to_integer(K, 16) || K <- ["8c","89","a5","c7","f9","14","8c","89","a4","32","4d","d7","08","00","45","00","00","3c","0e","ec","00","00","80","11","e1","89","0a","f1","1a","1e","0a","f1","1a","3c","2b","68","2b","68","00","08","ba","bf"]]).
 
 %% K1 =[erlang:list_to_integer(K, 16) || K <- ["8c","89","a5","c7","f9","14","8c","89","a4","32","4d","d7","08","00","45","00","00","3c","0e","ec","00","00","80","11","e1","89","0a","f1","1a","1e","0a","f1","1a","3c","2b","68","2b","68","00","08","ba","bf"]],
--export([start/2, stop/1, dir_loop/0, file_loop/0, zero_fill/2, read_loop/0, overhead/3, move_and_clean/1, send_chunk/6,send_control/1,get_free_thread/0,send_packet/4]).
+-export([start/2, stop/1, dir_loop/0, file_loop/0, zero_fill/2, read_loop/0, overhead/3, move_and_clean/1, send_chunk/6,send_control/1,get_free_thread/0,send_packet/6]).
 
 %% API.
 start(_Type, _Args) ->
@@ -49,6 +49,9 @@ start(_Type, _Args) ->
 				{mimetypes, [{<<".html">>, [<<"text/html">>]}]}
 			]},
 			{"/websocket", ws_handler, []},
+			{"/websocket1", ws_handler_1, []},
+			{"/websocket2", ws_handler_2, []},
+			{"/websocket3", ws_handler_3, []},
 			{"/static/[...]", cowboy_static, [
 				{directory, {priv_dir, websocket, [<<"static">>]}},
 				{mimetypes, [{<<".js">>, [<<"application/javascript">>]}]}
@@ -122,6 +125,8 @@ read_loop() ->
 			end,
 			FileInfo = erlang:iolist_to_binary([<<"1">>,zero_fill(erlang:size(unicode:characters_to_binary(File,unicode)),3),unicode:characters_to_binary(File,unicode),zero_fill(erlang:size(erlang:integer_to_binary(Filesize)),12),erlang:integer_to_binary(Filesize)]), 
 			io:format("Started file ~p Size ~p on pid ~p~n",[File,Filesize,self()]),
+			gproc:send({p,l, ws},{self(),ws,"newfile:" ++ io_lib:format("~p",[File]) ++ io_lib:format("~p",[zero_fill(Filesize,12)]) ++ io_lib:format("~p",[zero_fill(?ChunkSize,12)]) }),
+			%% gproc:send({p,l, ws},{self(),ws,"chksize:" ++ io_lib:format("~p",[?ChunkSize])}),
 			send_control ! {send,FileInfo},
 			self() ! {readchunk,File,Device,1,0},
 			read_loop();
@@ -133,7 +138,7 @@ read_loop() ->
 					Thread = get_free_thread(),
 					timer:sleep(500),
 					io:format("Chunk beg ~p Pid: ~p Thread: ~p Offset: ~p~n",[ChunkSeq,self(),Thread,Offset]),
-					%% gproc:send({p,l, ws},{self(),ws,"file " ++ io_lib:format("~p",[File])}),
+					gproc:send({p,l, ws},{self(),ws,"newchnk:"++io_lib:format("~p",[Thread])++"file:" ++ io_lib:format("~p",[File])}),
 					%% gproc:send({p,l, ws},{self(),ws,"size " ++ io_lib:format("~p",[Filesize])}),
 					%% gproc:send({p,l, ws},{self(),ws,"port " ++ io_lib:format("~p",[Port])}),
 					ets:insert(files,{File,{chunk,ChunkSeq,packet,1}}),
@@ -170,7 +175,7 @@ read_loop() ->
 				case [] =/= Match1 andalso lists:sort(Match2) == lists:sort(Match4) of
 					true ->
 								send_control ! {send,"File End"},
-								%% gproc:send({p,l, ws},{self(),ws,"file"}),
+								gproc:send({p,l, ws},{self(),ws,"finfile:"++io_lib:format("~p",[File])}),
 								io:format("Table ~p~n",[ets:match(files, '$1')]),
 								ok = move_and_clean(File),
 								io:format("Done~p~n",[File]);
@@ -221,15 +226,16 @@ send_chunk(File,Data,Thread,ChunkSeq,Offset,Pid) ->
 			true -> Len = erlang:size(Data);
 			false -> Len = ?PacketSize
 		end,
-		Len2 = Len+62,
+		%% Len2 = Len+62,
 		ets:insert(files,{File,{chunk,ChunkSeq,offset,Offset}}),
-		CompiledData = erlang:list_to_binary([erlang:list_to_binary([?Head,erlang:list_to_binary([overhead(PieceOfSh,File,ChunkSeq),<<PieceOfSh/binary>>])]) || <<PieceOfSh:Len/binary>> <= Data]),
+		%% CompiledData = erlang:list_to_binary([erlang:list_to_binary([?Head,erlang:list_to_binary([overhead(PieceOfSh,File,ChunkSeq),<<PieceOfSh/binary>>])]) || <<PieceOfSh:Len/binary>> <= Data]),
 		%% io:format("Data Len ~p Len2 ~p HERE ~p~n",[Len,Len2,CompiledData]),
 		%% [ewpcap:write(Socket,[<<PieceOfSh2/binary>>]) || <<PieceOfSh2:Len2/binary>> <= CompiledData],
-		[ send_packet(Socket2,"10.241.26.60",22220+Thread,PieceOfSh) || <<PieceOfSh:Len2/binary>> <= Data],
+		[ send_packet(Socket2,"10.241.26.60",Thread,PieceOfSh,File,ChunkSeq) || <<PieceOfSh:Len/binary>> <= Data],
 		%% io:format("Chunk ~p end Pid: ~p Thread: ~p Stats: ~p~n",[ChunkSeq,self(),Thread,ewpcap:stats(Socket)]),
 		%% ok = ewpcap:close(Socket),
 		ok = gen_udp:close(Socket2),
+		gproc:send({p,l, ws},{self(),ws,"donechk:"++io_lib:format("~p",[ChunkSeq])++"file:"++io_lib:format("~p",[File])}),
 		[[SendedPackets]] = ets:match(files, {File,{chunk,ChunkSeq,packet,'$1'}}),
 		ets:delete_object(files,{File,{chunk,ChunkSeq,packet,SendedPackets}}),
 		ets:insert(files,{File,{chunk,ChunkSeq,packets,SendedPackets}}),
@@ -238,9 +244,19 @@ send_chunk(File,Data,Thread,ChunkSeq,Offset,Pid) ->
 		Pid ! {done, File},
 		timer:sleep(1000).
 
-send_packet(Socket,Ip,Port,Data) ->
-		gen_udp:send(Socket,Ip,Port,Data),
-		gproc:send({p,l, ws},{self(),ws,"1"}).
+send_packet(Socket,Ip,Thread,Data,File,ChunkSeq) ->
+		[[NewSequence]] = ets:match(files, {File,{chunk,ChunkSeq,packet,'$1'}}),
+		ets:delete_object(files,{File,{chunk,ChunkSeq,packet,NewSequence}}),
+		ets:insert(files,{File,{chunk,ChunkSeq,packet,NewSequence+1}}),
+		gen_udp:send(Socket,Ip,22220+Thread,Data),
+		case NewSequence rem 32 of
+			0 ->
+				gproc:send({p,l, Thread},{self(),Thread,io_lib:format("~p",[ChunkSeq])++io_lib:format("~p",[NewSequence*?PacketSize])});
+			_ ->
+				void
+		end.
+		
+
 
 get_free_thread() ->
 	Sorted = lists:sort(ets:match(program, {data,{thread,'$1',free}})),

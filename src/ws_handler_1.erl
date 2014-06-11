@@ -1,4 +1,4 @@
--module(ws_handler).
+-module(ws_handler_1).
 -behaviour(cowboy_websocket_handler).
 
 -export([init/3]).
@@ -9,7 +9,7 @@
 
 init({tcp, http}, _Req, _Opts) ->
  	io:format("Init 1: ~n", []),
-	gproc:reg({p,l, ws}),
+	gproc:reg({p,l, 1}),
 	{upgrade, protocol, cowboy_websocket}.
 
 websocket_init(_TransportName, Req, _Opts) ->
@@ -17,10 +17,10 @@ websocket_init(_TransportName, Req, _Opts) ->
 	{ok, Req, undefined_state}.
 
 websocket_handle({text, Msg}, Req, State) ->
-	io:format("Handle 1: ~p~n", [Msg]),
+	io:format("Handle data 1: ~p~n", [Msg]),
 	case {text, lists:sublist(erlang:binary_to_list(Msg),1)} of
 		{text, "1"} ->
-			gproc:unreg({p,l, ws}),
+			%% gproc:unreg({p,l, ws}),
 			gproc:reg({p,l, 1}),
 			{reply,	{text, << " got ", Msg/binary >>}, Req, State};
 		{text, "2"} ->
