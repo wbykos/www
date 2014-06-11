@@ -59,12 +59,12 @@
 						Name = evt.data.slice(9,evt.data.length-37);
 						FileSize = evt.data.slice(evt.data.length-33,evt.data.length-21);
 						ChunkSize = evt.data.slice(evt.data.length-15,evt.data.length-3);
-						Num = files.push({name:Name,filesize:FileSize,canvas:"",tr:"",td1:"",td2:"",td3:"",td4:"",td5:"",chunk:""}) - 1;
+						Num = files.push({name:Name,filesize:FileSize,canvas:"",tr:"",td1:"",td2:"",td3:"",td4:"",td5:""}) - 1;
 						console.log('Recv NewFile ' + Name + ' FileNum ' + Num + ' filesize ' + FileSize + ' chunksize ' + ChunkSize + ' Chunks ' + Math.ceil(FileSize/ChunkSize));
 						filesatwork.push({num:Num,name:Name});
 						files[Num].name = Name;
 						files[Num] = new Array();
-						files[Num][files[Num].push()] = {name:Name,filesize:FileSize,canvas:"",tr:"",td1:"",td2:"",td3:"",td4:"",td5:"",chunk:""};
+						files[Num][files[Num].push()] = {name:Name,filesize:FileSize,canvas:"",tr:"",td1:"",td2:"",td3:"",td4:"",td5:""};
 						// Create table cell
 						files[Num][0].tr = document.createElement('tr');
 						files[Num][0].td1 = document.createElement('td');
@@ -134,15 +134,19 @@
 			files[Num][ChunkSeq] = {ws:"",recv:""};
 			console.log('OpenChunk-' + Num +'-'+ Thread +'-'+ChunkSeq);
 			files[Num][ChunkSeq].recv = 0;
-			files[Num][ChunkSeq].ws.chunk = ChunkSeq;
 			files[Num][ChunkSeq].ws = new WebSocket("ws://10.241.26.30:80/websocket" + Thread);
-			files[Num][ChunkSeq].ws.onopen = function(){
+			// files[Num][ChunkSeq].ws.onopen = function(){
 				// files[1].ws.send(1);
 				// console.log('Data Connected - ' + Thread);
-			};
-			//ChunkSeq - глобальная изменяющаяся переменная
-			//ws - вебсокет
-			var onmessage = {a:ChunkSeq,fun:function(event) {console.log('Check--' + this.a + "--" +event.data);}};
+			// };
+
+			var onmessage = {chunk:ChunkSeq,num:Num,fun:function(event) {
+				if(this.chunk == 1) {
+					SetPixel(files[this.num][0].canvas,parseInt(event.data/16777));
+				}
+				// console.log('Check--' + this.chunk + "--" +event.data);
+
+			}};
 			files[Num][ChunkSeq].ws.addEventListener("message", function(event) {
 			  onmessage.fun(event);
 			});
@@ -168,12 +172,6 @@
 				console.log('Data Connection for file ' + Num +' chunk ' + ChunkSeq + ' closed');
 			};
 		};
-
-
-		function Close2(evt,a) {
-
-			console.log('D' + a);
-		}
 
 		function Close() {
 			ws.close();
