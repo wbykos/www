@@ -9,7 +9,8 @@
 
 
 -define(ControlPort, 11111).
--define(DstIp, "10.241.26.60").
+%% -define(DstIp, "10.241.26.60").
+-define(DstIp, "10.107.113.129").
 -define(PacketSize, 1328).
 -define(ToDoFolder,"c:/f1").
 -define(CompletedFolder,"c:/f2").
@@ -249,7 +250,7 @@ send_packet(Socket,Ip,Thread,Data,File,ChunkSeq) ->
 		gen_udp:send(Socket,Ip,22220+Thread,Data),
 		case NewSequence rem 32 of
 			0 ->
-				gproc:send({p,l, Thread},{self(),Thread,io_lib:format("~p",[ChunkSeq])++io_lib:format("~p",[NewSequence*?PacketSize])});
+				gproc:send({p,l, Thread},{self(),Thread,io_lib:format("~p",[NewSequence*?PacketSize])});
 			_ ->
 				void
 		end.

@@ -10,6 +10,7 @@
 
 
 		<script type="text/javascript">
+		var ip = "10.107.113.129";
 		var filesatwork = new Array();
 		var files = new Array();
 		files.push({zerofill1:""});
@@ -23,36 +24,14 @@
 
 		function Open_control(){
 		
-			ws = new WebSocket("ws://10.241.26.30:80/websocket");
+			ws = new WebSocket("ws://"+ip+":80/websocket");
 			ws.onopen = function(){
 				console.log('Control connected');
 			};
 			ni = document.getElementById('files_table');
-			// element = document.getElementById("canvas2");
-			// canvas = element.getContext("2d");
-
-			// var setPixel = function (x,y,c) {
-		 //    var p=canvas.createImageData(1,1);
-		 //    p.data[0]=c.r;
-		 //    p.data[1]=c.g;
-		 //    p.data[2]=c.b;
-		 //    p.data[3]=c.a;
-		 //    canvas.putImageData(p,x,y);
-		 //    canvas.putImageData(p,x,y+1);
-		 //    canvas.putImageData(p,x,y+2);
-		 //    canvas.putImageData(p,x,y+3);
-		 //    canvas.putImageData(p,x,y+4);
-		 //    canvas.putImageData(p,x,y+5);
-		 //    canvas.putImageData(p,x,y+6);
-		 //    canvas.putImageData(p,x,y+7);
-
-			// }
 
 			ws.onmessage = function (evt)
 			{
-				// var received_msg = evt.data;
-				// setPixel(1, 1, black);
-				
 				switch (evt.data.slice(0,7))
 				{
 					case "newfile": 
@@ -134,7 +113,7 @@
 			files[Num][ChunkSeq] = {ws:"",recv:""};
 			console.log('OpenChunk-' + Num +'-'+ Thread +'-'+ChunkSeq);
 			files[Num][ChunkSeq].recv = 0;
-			files[Num][ChunkSeq].ws = new WebSocket("ws://10.241.26.30:80/websocket" + Thread);
+			files[Num][ChunkSeq].ws = new WebSocket("ws://"+ip+":80/websocket" + Thread);
 			// files[Num][ChunkSeq].ws.onopen = function(){
 				// files[1].ws.send(1);
 				// console.log('Data Connected - ' + Thread);
@@ -142,7 +121,7 @@
 
 			var onmessage = {chunk:ChunkSeq,num:Num,fun:function(event) {
 				if(this.chunk == 1) {
-					SetPixel(files[this.num][0].canvas,parseInt(event.data/16777));
+					SetPixel(files[this.num][0].canvas,parseInt(event.data/167772));
 				}
 				// console.log('Check--' + this.chunk + "--" +event.data);
 
