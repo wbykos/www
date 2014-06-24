@@ -11,6 +11,7 @@
 
 		<script type="text/javascript">
 		var ip = "10.107.113.129";
+		var BarWidth = 700;
 		var filesatwork = new Array();
 		var files = new Array();
 		files.push({zerofill1:""});
@@ -18,6 +19,13 @@
 		black = {
 		    r: 0,
 		    g: 0,
+		    b: 0,
+		    a: 255
+		};
+
+		green = {
+		    r: 0,
+		    g: 102,
 		    b: 0,
 		    a: 255
 		};
@@ -36,14 +44,14 @@
 				{
 					case "newfile": 
 						Name = evt.data.slice(9,evt.data.length-37);
-						FileSize = evt.data.slice(evt.data.length-33,evt.data.length-21);
-						ChunkSize = evt.data.slice(evt.data.length-15,evt.data.length-3);
-						Num = files.push({name:Name,filesize:FileSize,canvas:"",tr:"",td1:"",td2:"",td3:"",td4:"",td5:""}) - 1;
+						FileSize = parseInt(evt.data.slice(evt.data.length-33,evt.data.length-21));
+						ChunkSize = parseInt(evt.data.slice(evt.data.length-15,evt.data.length-3));
+						Num = files.push({name:Name,filesize:FileSize,chunksize:ChunkSize,canvas:"",tr:"",td1:"",td2:"",td3:"",td4:"",td5:""}) - 1;
 						console.log('Recv NewFile ' + Name + ' FileNum ' + Num + ' filesize ' + FileSize + ' chunksize ' + ChunkSize + ' Chunks ' + Math.ceil(FileSize/ChunkSize));
 						filesatwork.push({num:Num,name:Name});
 						files[Num].name = Name;
 						files[Num] = new Array();
-						files[Num][files[Num].push()] = {name:Name,filesize:FileSize,canvas:"",tr:"",td1:"",td2:"",td3:"",td4:"",td5:""};
+						files[Num][files[Num].push()] = {name:Name,filesize:FileSize,chunksize:ChunkSize,canvas:"",tr:"",td1:"",td2:"",td3:"",td4:"",td5:""};
 						// Create table cell
 						files[Num][0].tr = document.createElement('tr');
 						files[Num][0].td1 = document.createElement('td');
@@ -118,11 +126,13 @@
 				// files[1].ws.send(1);
 				// console.log('Data Connected - ' + Thread);
 			// };
-
-			var onmessage = {chunk:ChunkSeq,num:Num,fun:function(event) {
-				if(this.chunk == 1) {
-					SetPixel(files[this.num][0].canvas,parseInt(event.data/167772));
-				}
+			barsize = BarWidth/(files[Num][0].filesize/files[Num][0].chunksize);
+			pixsize = files[Num][0].chunksize/barsize;
+			var onmessage = {chunk:ChunkSeq-1,barsize:barsize,pixsize:pixsize,num:Num,fun:function(event) {
+				// if(this.chunk == 1) {
+					SetPixel(files[this.num][0].canvas,parseInt(event.data/pixsize)+this.barsize*this.chunk);
+					// console.log('Check--' + this.barsize + "--" +event.data);
+				// }
 				// console.log('Check--' + this.chunk + "--" +event.data);
 
 			}};
@@ -160,7 +170,7 @@
 			// div = document.getElementById("bar"+(Id-1));
 			files[Id][0].canvas = document.createElement('canvas');
 			files[Id][0].canvas.setAttribute('id','bar'+Id);
-			files[Id][0].canvas.setAttribute('width','700');
+			files[Id][0].canvas.setAttribute('width',BarWidth);
 			files[Id][0].canvas.setAttribute('height','10');
 			// div.appendChild(files[Id][0]);
 			files[Id][0].td2.appendChild(files[Id][0].canvas);
@@ -210,10 +220,10 @@
 				// console.log('X:' + x);
 				var ctx=canvas.getContext("2d");
 			    var p=ctx.createImageData(1,1);
-			    p.data[0]=black.r;
-			    p.data[1]=black.g;
-			    p.data[2]=black.b;
-			    p.data[3]=black.a;
+			    p.data[0]=green.r;
+			    p.data[1]=green.g;
+			    p.data[2]=green.b;
+			    p.data[3]=green.a;
 			    ctx.putImageData(p,x,1);
 			    ctx.putImageData(p,x,2);
 			    ctx.putImageData(p,x,3);
