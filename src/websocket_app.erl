@@ -6,7 +6,8 @@
 -module(websocket_app).
 -behaviour(application).
 -include_lib("kernel/include/file.hrl").
-
+-include_lib("pkt/include/pkt.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 
 -define(ControlPort, 11111).
