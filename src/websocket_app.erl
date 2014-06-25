@@ -136,7 +136,7 @@ read_loop() ->
 				{ok, ChunkData} ->
 					Thread = get_free_thread(),
 					timer:sleep(500),
-					io:format("Chunk beg ~p Pid: ~p Thread: ~p Offset: ~p~n",[ChunkSeq,self(),Thread,Offset]),
+					io:format("Chunk beg ~p Pid: ~p File: ~p Thread: ~p Offset: ~p~n",[ChunkSeq,self(),File,Thread,Offset]),
 					gproc:send({p,l, ws},{self(),ws,"newchnk:"++io_lib:format("~p",[Thread])++"file:" ++ io_lib:format("~p",[File])}),
 					%% gproc:send({p,l, ws},{self(),ws,"size " ++ io_lib:format("~p",[Filesize])}),
 					%% gproc:send({p,l, ws},{self(),ws,"port " ++ io_lib:format("~p",[Port])}),
@@ -166,19 +166,21 @@ read_loop() ->
 					end,
 					exit(file_read_error)
 			end;
-		{done,File} ->
+		{done,File,ChunkSeq,Thread,Offset} ->
 			Match1 = ets:match(files, {'$1',{status,done}}),
 			Match2 = ets:match(files, {File,{chunk,'$1',packets,'_'}}),
 			Match4 = ets:match(files, {File,{chunk,'$1',offset,'_'}}),
-			 %% io:format("E~p ttt ~p ttt ~p~n",[Match2,lists:sort(Match4),Match1]),
+			%% io:format("E~p ttt ~p ttt ~p~n",[Match2,lists:sort(Match4),Match1]),
+			io:format("Chunk end ~p Pid: ~p File: ~p Thread: ~p Offset: ~p~n",[ChunkSeq,self(),File,Thread,Offset]),
+			%% io:format("E ~p~n",[ets:info(files, size)]),
 				case [] =/= Match1 andalso lists:sort(Match2) == lists:sort(Match4) of
 					true ->
 								send_control ! {send,"File End"},
 								gproc:send({p,l, ws},{self(),ws,"finfile:"++io_lib:format("~p",[File])}),
 								io:format("Table ~p~n",[ets:match(files, '$1')]),
 								ok = move_and_clean(File),
-								io:format("Done~p~n",[File]);
-
+								io:format("Done~p~n",[File]),
+								read_loop();
 					_Any ->
 						%% io:format("DDDD~p~n",[Any]),
 						read_loop()
@@ -214,12 +216,12 @@ move_and_clean(FileToClose) ->
 	%% FileToMove = filename:join(lists:append([?CompletedFolder],lists:nthtail(erlang:length(filename:split(?ToDoFolder)),filename:split(FileToClose)))),
 	%% filelib:ensure_dir(FileToMove),
 	%% file:rename(FileToClose,FileToMove), 
-	ets:delete(files,FileToClose),
+	%% ets:delete(files,FileToClose),
 	ok.
 %% 
 send_chunk(File,Data,Thread,ChunkSeq,Offset,Pid) ->
 		%% {ok, Socket} = ewpcap:open(?Device, [{filter, "icmp"},{buffer, 32438000}]),
-		io:format("Thread ~p~n",[Thread]),
+		%% io:format("Thread ~p~n",[Thread]),
 		{ok, Socket2} = gen_udp:open(22220+Thread,[binary,{active, false},{buffer, 16777216},{dontroute, true},{reuseaddr, true},{sndbuf, 16777216}]),
 		case erlang:size(Data) =< ?PacketSize of
 			true -> Len = erlang:size(Data);
@@ -240,7 +242,7 @@ send_chunk(File,Data,Thread,ChunkSeq,Offset,Pid) ->
 		ets:insert(files,{File,{chunk,ChunkSeq,packets,SendedPackets}}),
 		true = ets:delete_object(program, {data,{thread,Thread,active}}),
 		true = ets:insert(program, {data,{thread,Thread,free}}),
-		Pid ! {done, File},
+		Pid ! {done, File,ChunkSeq,Thread,Offset},
 		timer:sleep(1000).
 
 send_packet(Socket,Ip,Thread,Data,File,ChunkSeq) ->
