@@ -10,7 +10,8 @@
 
 
 		<script type="text/javascript">
-		var ip = "10.107.113.129";
+		// var ip = "10.107.113.129";
+		var ip = "10.241.26.30";
 		var BarWidth = 700;
 		var filesatwork = new Array();
 		var files = new Array();
@@ -47,12 +48,15 @@
 						FileSize = parseInt(evt.data.slice(evt.data.length-33,evt.data.length-21));
 						ChunkSize = parseInt(evt.data.slice(evt.data.length-15,evt.data.length-3));
 						Num = files.push({name:Name,filesize:FileSize,chunksize:ChunkSize,canvas:"",tr:"",td1:"",td2:"",td3:"",td4:"",td5:""}) - 1;
+						// console.log(files[1]);
 						console.log('Recv NewFile ' + Name + ' FileNum ' + Num + ' filesize ' + FileSize + ' chunksize ' + ChunkSize + ' Chunks ' + Math.ceil(FileSize/ChunkSize));
 						filesatwork.push({num:Num,name:Name});
 						files[Num].name = Name;
 						files[Num] = new Array();
 						files[Num][files[Num].push()] = {name:Name,filesize:FileSize,chunksize:ChunkSize,canvas:"",tr:"",td1:"",td2:"",td3:"",td4:"",td5:""};
+						// console.log(files);
 						// Create table cell
+
 						files[Num][0].tr = document.createElement('tr');
 						files[Num][0].td1 = document.createElement('td');
 						files[Num][0].td1.innerHTML = Num;
@@ -85,7 +89,7 @@
 					    }
 						break;
 					case "donechk": 
-						console.log('Recv DoneChunk ' + evt.data );
+						// console.log('Recv DoneChunk ' + evt.data );
 						DoneChunkFile =  evt.data.slice(15,evt.data.length-1);
 						DoneChunkSeq = evt.data.slice(8,9);
 						// console.log('ONE ' + filesatwork[i].name + 'ONE ' + DoneChunkFile);
@@ -94,7 +98,7 @@
 							// console.log(filesatwork[i]);
 					        if (filesatwork[i].name == DoneChunkFile) {
 								files[filesatwork[i].num][DoneChunkSeq].ws.close();
-								console.log('Found ONE ' + DoneChunkSeq + '-' + files[filesatwork[i].num][DoneChunkSeq].recv);
+								console.log('DoneChunk File: ' + DoneChunkSeq + ' Recv: ' + files[filesatwork[i].num][DoneChunkSeq].recv);
 								// Open_Data(filesatwork[i].num,Thread);
 					        };
 					    }
@@ -119,47 +123,57 @@
 		function Open_Data(Num,Thread){
 			ChunkSeq = files[Num].push();
 			files[Num][ChunkSeq] = {ws:"",recv:""};
-			console.log('OpenChunk-' + Num +'-'+ Thread +'-'+ChunkSeq);
+			console.log('OpenChunk File: ' + Num +' Thread: '+ Thread +' ChunkSeq: '+ChunkSeq);
 			files[Num][ChunkSeq].recv = 0;
 			files[Num][ChunkSeq].ws = new WebSocket("ws://"+ip+":80/websocket" + Thread);
 			// files[Num][ChunkSeq].ws.onopen = function(){
 				// files[1].ws.send(1);
-				// console.log('Data Connected - ' + Thread);
+				 // console.log(files[Num][ChunkSeq]);
 			// };
 			barsize = BarWidth/(files[Num][0].filesize/files[Num][0].chunksize);
 			pixsize = files[Num][0].chunksize/barsize;
-			var onmessage = {chunk:ChunkSeq-1,barsize:barsize,pixsize:pixsize,num:Num,fun:function(event) {
-				// if(this.chunk == 1) {
-					SetPixel(files[this.num][0].canvas,parseInt(event.data/pixsize)+this.barsize*this.chunk);
-					// console.log('Check--' + this.barsize + "--" +event.data);
-				// }
-				// console.log('Check--' + this.chunk + "--" +event.data);
+			if (Num == 1) { 
+				var CTX=files[Num][0].canvas.getContext("2d");
+			    var P=CTX.createImageData(1,1);
+				P.data[0]=green.r;
+			    P.data[1]=green.g;
+			    P.data[2]=green.b;
+			    P.data[3]=green.a; } else {	
+			    var CTX=files[Num][0].canvas.getContext("2d");
+			    var P=CTX.createImageData(1,1);
+			    P.data[0]=black.r;
+			    P.data[1]=black.g;
+			    P.data[2]=black.b;
+			    P.data[3]=black.a;};
+			   console.log(files);
+			var onmessage = {ctx:CTX,P:P,chunk:ChunkSeq-1,barsize:barsize,PixSize:pixsize,num:Num,fun:function(msg) {
+				  // if( this.num == 1 && this.chunk == 0) {
+					
+				// console.log('Check File: ' + this.num + " Chunk: " + this.chunk + "--" +event.data);
+				// console.log(this.P);
+				var x = parseInt(msg.data/this.PixSize)+this.barsize*this.chunk;
+				// console.log('X:'+x+"----"+ this.PixSize);
+			    this.ctx.putImageData(this.P,x,1);
+			    this.ctx.putImageData(this.P,x,2);
+			    this.ctx.putImageData(this.P,x,3);
+			    this.ctx.putImageData(this.P,x,4);
+			    this.ctx.putImageData(this.P,x,5);
+			    this.ctx.putImageData(this.P,x,6);
+			    this.ctx.putImageData(this.P,x,7);
+			    // console.log('Check--' + parseInt(this.chunk+1) + "--" +e.data.slice(0,1) +"----"+ e.data);
+				  // }
+
+				// SetPixel(files[this.num][0].canvas,parseInt(event.data/pixsize)+this.barsize*this.chunk,color);
+				// console.log('Check--' + parseInt(this.chunk+1) + "--" +e.data.slice(0,1) +"----"+ e.data);
 
 			}};
-			files[Num][ChunkSeq].ws.addEventListener("message", function(event) {
-			  onmessage.fun(event);
+			files[Num][ChunkSeq].ws.addEventListener("message", function(msg) {
+				onmessage.fun(msg);
 			});
-			// files[Num][ChunkSeq].ws.onmessage = function (evt)
+			// files[Num][ChunkSeq].ws.onclose = function()
 			// {
-			// 	console.log(this)
-			// 	var C1 = ChunkSeq;
-			// 	files[Num][ChunkSeq].recv = evt.data;
-			// 	console.log('Beg');
-			// 	console.log('DataMSG__TRUE --' + evt.data.charAt(0));
-			// 	console.log('DataMSG_FALSE --' + C1);
-			// 	console.log('Eng');
-			// 	// if (ChunkSeq == 0) {
-
-			// 	// 	SetPixel(files[Num][0].canvas,parseInt(evt.data/16777));
-			// 	// 	console.log('DataMSG ' + evt.data);
-			// 	// }
-				
-			// 	// console.log('DataMSG ' + files[Num][ChunkSeq].packets);
+			// 	console.log('Data Connection for file ' + Num +' chunk ' + ChunkSeq + ' closed');
 			// };
-			files[Num][ChunkSeq].ws.onclose = function()
-			{
-				console.log('Data Connection for file ' + Num +' chunk ' + ChunkSeq + ' closed');
-			};
 		};
 
 		function Close() {
@@ -179,51 +193,23 @@
 			    width,
 			    height,
 			    red;
-
-
-
 			// init canvas
 			element = document.getElementById('bar'+Id);
 			canvas = element.getContext("2d");
-
-
 			width = element.width;
 			height = element.height;
 			canvas.fillStyle = '#eeeeee';
 			canvas.fillRect(0, 0, width, height);
-
-			
-			// setpixel
-			// var setPixel = function (x,y,c) {
-			//     var p=canvas.createImageData(1,1);
-			//     p.data[0]=c.r;
-			//     p.data[1]=c.g;
-			//     p.data[2]=c.b;
-			//     p.data[3]=c.a;
-			//     canvas.putImageData(p,x,y);
-			//     canvas.putImageData(p,x,y+1);
-			//     canvas.putImageData(p,x,y+2);
-			//     canvas.putImageData(p,x,y+3);
-			//     canvas.putImageData(p,x,y+4);
-			//     canvas.putImageData(p,x,y+5);
-			//     canvas.putImageData(p,x,y+6);
-			//     canvas.putImageData(p,x,y+7);
-			// }
-
-			
-			// console.log(files[Id][0]);
-
-			// element.onclick = function (e) { setPixel(e.offsetX, e.offsetY, black);};
 		}
 
-		function SetPixel(canvas,x){
+		function SetPixel(canvas,x,color){
 				// console.log('X:' + x);
 				var ctx=canvas.getContext("2d");
 			    var p=ctx.createImageData(1,1);
-			    p.data[0]=green.r;
-			    p.data[1]=green.g;
-			    p.data[2]=green.b;
-			    p.data[3]=green.a;
+			    p.data[0]=color.r;
+			    p.data[1]=color.g;
+			    p.data[2]=color.b;
+			    p.data[3]=color.a;
 			    ctx.putImageData(p,x,1);
 			    ctx.putImageData(p,x,2);
 			    ctx.putImageData(p,x,3);

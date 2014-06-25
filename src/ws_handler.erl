@@ -8,12 +8,12 @@
 -export([websocket_terminate/3]).
 
 init({tcp, http}, _Req, _Opts) ->
- 	io:format("Init 1: ~n", []),
+ 	io:format("Init 0: ~n", []),
 	gproc:reg({p,l, ws}),
 	{upgrade, protocol, cowboy_websocket}.
 
 websocket_init(_TransportName, Req, _Opts) ->
-        io:format("Init 2: ~n", []),
+        io:format("Init 0: ~n", []),
 	{ok, Req, undefined_state}.
 
 websocket_handle({text, Msg}, Req, State) ->
