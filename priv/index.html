@@ -13,6 +13,7 @@
 		// var ip = "10.107.113.129";
 		var ip = "10.241.26.30";
 		var BarWidth = 400;
+		var BarHeight = 7;
 		var filesatwork = new Array();
 		var files = new Array();
 		files.push({zerofill1:""});
@@ -47,13 +48,13 @@
 						Name = evt.data.slice(9,evt.data.length-37);
 						FileSize = parseInt(evt.data.slice(evt.data.length-33,evt.data.length-21));
 						ChunkSize = parseInt(evt.data.slice(evt.data.length-15,evt.data.length-3));
-						Num = files.push({name:Name,filesize:FileSize,chunksize:ChunkSize,canvas:"",tr:"",td1:"",td2:"",td3:"",td4:"",td5:""}) - 1;
+						Num = files.push({name:Name,filesize:FileSize,chunksize:ChunkSize,canvas:"",recv:0,tr:"",td1:"",td2:"",td3:"",td4:"",td5:""}) - 1;
 						// console.log(files[1]);
 						console.log('Recv NewFile ' + Name + ' FileNum ' + Num + ' filesize ' + FileSize + ' chunksize ' + ChunkSize + ' Chunks ' + Math.ceil(FileSize/ChunkSize));
 						filesatwork.push({num:Num,name:Name});
 						files[Num].name = Name;
 						files[Num] = new Array();
-						files[Num][files[Num].push()] = {name:Name,filesize:FileSize,chunksize:ChunkSize,canvas:"",tr:"",td1:"",td2:"",td3:"",td4:"",td5:""};
+						files[Num][files[Num].push()] = {name:Name,filesize:FileSize,chunksize:ChunkSize,canvas:"",recv:0,tr:"",td1:"",td2:"",td3:"",td4:"",td5:""};
 						// console.log(files);
 						// Create table cell
 
@@ -66,6 +67,7 @@
 						files[Num][0].td3 = document.createElement('td');
 						files[Num][0].td3.innerHTML = "0";
 						files[Num][0].td3.setAttribute('width','111');
+						files[Num][0].td3.setAttribute('align','right');
 						files[Num][0].td4 = document.createElement('td');
 						files[Num][0].td4.innerHTML = FileSize;
 						files[Num][0].td4.setAttribute('width','111');
@@ -102,11 +104,25 @@
 							// console.log(filesatwork[i]);
 					        if (filesatwork[i].name == DoneChunkFile) {
 								files[filesatwork[i].num][DoneChunkSeq].ws.close();
-								console.log('DoneChunk File: ' + DoneChunkSeq + ' Recv: ' + files[filesatwork[i].num][DoneChunkSeq].recv);
+								console.log('DoneChunk File: ' + DoneChunkSeq + ' Recv: ' + files[filesatwork[i].num][0].recv);
 								// Open_Data(filesatwork[i].num,Thread);
 					        };
 					    }
 					    break;
+					case "finfile": 
+						File = evt.data.slice(9,evt.data.length-1);
+						console.log('Recv finfile ' + File);
+						for(var i=1; i<filesatwork.length; i++) {
+					        if (filesatwork[i].name == File) {
+								console.log('Finfile ' + i + ' filename: ' + File);
+								files[i][0].td3.innerHTML = files[i][0].filesize;
+								var fctx=files[i][0].canvas.getContext("2d");
+								fctx.clearRect(0, 0, BarWidth, BarHeight);
+								fctx.fillStyle="#006600";
+								fctx.fillRect(0,0,BarWidth,BarHeight);
+					        };
+					    }
+						break;
 				default: console.log('CtrlMSG ' + evt.data);;
 				}
 			};
@@ -126,9 +142,8 @@
 
 		function Open_Data(Num,Thread){
 			ChunkSeq = files[Num].push();
-			files[Num][ChunkSeq] = {ws:"",recv:""};
+			files[Num][ChunkSeq] = {ws:""};
 			console.log('OpenChunk File: ' + Num +' Thread: '+ Thread +' ChunkSeq: '+ChunkSeq);
-			files[Num][ChunkSeq].recv = 0;
 			files[Num][ChunkSeq].ws = new WebSocket("ws://"+ip+":80/websocket" + Thread);
 			// files[Num][ChunkSeq].ws.onopen = function(){
 				// files[1].ws.send(1);
@@ -146,6 +161,8 @@
 			var onmessage = {PixIncrease:pixincrease,ctx:CTX,P:P,chunk:ChunkSeq-1,barsize:barsize,PixSize:pixsize,num:Num,fun:function(msg) {
 				// console.log('Check File: ' + this.num + " Chunk: " + this.chunk + "--" +event.data);
 				// console.log(this.P);
+				files[this.num][0].recv = files[this.num][0].recv + (1328*64);
+				files[this.num][0].td3.innerHTML = files[this.num][0].recv;
 				var x = parseInt(msg.data/this.PixSize)+this.barsize*this.chunk;
 				// console.log('X:'+x+"----"+ this.PixIncrease);
 				for (i = 1; i <= this.PixIncrease; i++) { 
@@ -176,7 +193,7 @@
 			files[Id][0].canvas = document.createElement('canvas');
 			files[Id][0].canvas.setAttribute('id','bar'+Id);
 			files[Id][0].canvas.setAttribute('width',BarWidth);
-			files[Id][0].canvas.setAttribute('height','7');
+			files[Id][0].canvas.setAttribute('height',BarHeight);
 			files[Id][0].canvas.setAttribute('style','margin:0;border:0;');
 			// div.appendChild(files[Id][0]);
 			files[Id][0].td2.appendChild(files[Id][0].canvas);
@@ -236,7 +253,7 @@
 <tr id="tr_basic">
 <td id="td1" width="17"></td>
 <td id="td2" width="400"></td>
-<td id="td3" width="111">Sent</td>
+<td id="td3" width="111" align="right">Sent</td>
 <td id="td4" width="111">/ End</td>
 <td id="td5">FileName</td>
 </tr>

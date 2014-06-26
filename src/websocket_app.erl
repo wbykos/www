@@ -179,10 +179,10 @@ read_loop() ->
 					true ->
 								send_control ! {send,"File End"},
 								gproc:send({p,l, ws},{self(),ws,"finfile:"++io_lib:format("~p",[File])}),
-								io:format("Table ~p~n",[ets:match(files, '$1')]),
+								io:format("FileDone: ~p Table ~p~n",[File,ets:match(files, '$1')]),
 								ok = move_and_clean(File),
-								io:format("Done~p~n",[File]),
-								read_loop();
+								io:format("Done~p~n",[File]);
+								%% read_loop();
 					_Any ->
 						%% io:format("DDDD~p~n",[Any]),
 						read_loop()
