@@ -139,7 +139,7 @@ read_loop() ->
 					timer:sleep(500),
 					io:format("Chunk beg ~p Pid: ~p File: ~p Thread: ~p Offset: ~p~n",[ChunkSeq,self(),File,Thread,Offset]),
 					gproc:send({p,l, ws},{self(),ws,"newchnk:"++io_lib:format("~p",[Thread])++"file:" ++ io_lib:format("~p",[File])}),
-					io:format("New chunk sent ~p~n",[Thread]),
+					%% io:format("New chunk sent ~p~n",[Thread]),
 					%% gproc:send({p,l, ws},{self(),ws,"size " ++ io_lib:format("~p",[Filesize])}),
 					%% gproc:send({p,l, ws},{self(),ws,"port " ++ io_lib:format("~p",[Port])}),
 					%% ets:insert(files,{File,{chunk,ChunkSeq,packet,1}}),
@@ -168,20 +168,23 @@ read_loop() ->
 					end,
 					exit(file_read_error)
 			end;
-		{done,File} ->
-			Match1 = ets:match(files, {'$1',{status,done}}),
-			Match2 = ets:match(files, {File,{chunk,'$1',packets,'_'}}),
-			Match4 = ets:match(files, {File,{chunk,'$1',offset,'_'}}),
+		{done,FinFile} ->
+			%% Match1 = ets:match(files, {'$1',{status,done}}),
+			[_|Match1] = ets:match(files, {FinFile,{status,'$1'}}),
+			Match2 = ets:match(files, {FinFile,{chunk,'$1',packets,'_'}}),
+			Match4 = ets:match(files, {FinFile,{chunk,'$1',offset,'_'}}),
 			%% io:format("E~p ttt ~p ttt ~p~n",[Match2,lists:sort(Match4),Match1]),
 			%% io:format("Chunk end ~p Pid: ~p File: ~p Thread: ~p Offset: ~p~n",[ChunkSeq,self(),File,Thread,Offset]),
-			%% io:format("E ~p~n",[ets:info(files, size)]),
-				case [] =/= Match1 andalso lists:sort(Match2) == lists:sort(Match4) of
+				case [[done]] == Match1 andalso lists:sort(Match2) == lists:sort(Match4) of
 					true ->
-								send_control ! {send,"File End"},
-								gproc:send({p,l, ws},{self(),ws,"finfile:"++io_lib:format("~p",[File])}),
-								io:format("FileDone: ~p Table ~p~n",[File,ets:match(files, '$1')]),
-								ok = move_and_clean(File),
-								io:format("Done~p~n",[File]);
+								send_control ! {send,"FinFile End"},
+								gproc:send({p,l, ws},{self(),ws,"finfile:"++io_lib:format("~p",[FinFile])}),
+								%% io:format("FileDone: ~p Table ~p~n",[File,ets:match(files, '$1')]),
+								ok = move_and_clean(FinFile),
+								io:format("Done~p~n",[FinFile]),
+								%% io:format("EEEEEEEEee ~p  ||||||  ~p~n",[FinFile, Match1]),
+								%% io:format("E ONE: ~p TWO: ~p THREE: ~p FOUR: ~p~n",[Match2,lists:sort(Match4),Match1,FinFile]),
+								exit(done);
 								%% read_loop();
 					_Any ->
 						%% io:format("DDDD~p~n",[Any]),
@@ -214,7 +217,7 @@ zero_fill(Number, Size) ->
 	B3 = <<B2/binary,B1/binary>>,
 	B3.
 
-move_and_clean(FileToClose) ->
+move_and_clean(_FileToClose) ->
 	%% FileToMove = filename:join(lists:append([?CompletedFolder],lists:nthtail(erlang:length(filename:split(?ToDoFolder)),filename:split(FileToClose)))),
 	%% filelib:ensure_dir(FileToMove),
 	%% file:rename(FileToClose,FileToMove), 
@@ -225,6 +228,7 @@ send_chunk(File,Data,Thread,ChunkSeq,Offset,Pid) ->
 		%% {ok, Socket} = ewpcap:open(?Device, [{filter, "icmp"},{buffer, 32438000}]),
 		%% io:format("Thread ~p~n",[Thread]),
 		{ok, Socket2} = gen_udp:open(22220+Thread,[binary,{active, false},{buffer, 16777216},{dontroute, true},{reuseaddr, true},{sndbuf, 16777216}]),
+		gen_udp:send(Socket2,"10.241.26.60",22229,"Data"),
 		case erlang:size(Data) =< ?PacketSize of
 			true -> Len = erlang:size(Data);
 			false -> Len = ?PacketSize
@@ -235,7 +239,7 @@ send_chunk(File,Data,Thread,ChunkSeq,Offset,Pid) ->
 		%% io:format("Data Len ~p Len2 ~p HERE ~p~n",[Len,Len2,CompiledData]),
 		%% [ewpcap:write(Socket,[<<PieceOfSh2/binary>>]) || <<PieceOfSh2:Len2/binary>> <= CompiledData],
 		ets:insert(thread_counters,{Thread,1}),
-		[ send_packet(Socket2,"10.241.26.30",Thread,PieceOfSh,File,ChunkSeq) || <<PieceOfSh:Len/binary>> <= Data],
+		[ send_packet(Socket2,"10.241.26.60",Thread,PieceOfSh,File,ChunkSeq) || <<PieceOfSh:Len/binary>> <= Data],
 		ets:insert(files,{File,{chunk,ChunkSeq,packet,ets:update_counter(thread_counters,Thread,1)-1}}),
 		%% io:format("Chunk ~p end Pid: ~p Thread: ~p Stats: ~p~n",[ChunkSeq,self(),Thread,ewpcap:stats(Socket)]),
 		%% ok = ewpcap:close(Socket),
@@ -249,12 +253,12 @@ send_chunk(File,Data,Thread,ChunkSeq,Offset,Pid) ->
 		Pid ! {done, File},
 		timer:sleep(1000).
 
-send_packet(Socket,Ip,Thread,Data,File,ChunkSeq) ->
+send_packet(Socket,Ip,Thread,Data,_File,_ChunkSeq) ->
 		%% [[NewSequence]] = ets:match(files, {File,{chunk,ChunkSeq,packet,'$1'}}),
 		%% ets:delete_object(files,{File,{chunk,ChunkSeq,packet,NewSequence}}),
 		%% ets:insert(files,{File,{chunk,ChunkSeq,packet,NewSequence+1}}),
 		NewSequence2 = ets:update_counter(thread_counters,Thread,1),
-
+		%% io:format("1~n"),
 		gen_udp:send(Socket,Ip,22220+Thread,Data),
 		case NewSequence2 rem 64 of
 			0 ->

@@ -20,3 +20,9 @@ pktsize*64 84992
 1pix * 2.1pix
 
 5:00 music
+
+
+{ok, Socket2} = gen_udp:open(22220,[binary,{reuseaddr, true}]).
+gen_udp:send(Socket2,"10.241.26.60",22229,"Data").
+
+[[reading],[done]]
